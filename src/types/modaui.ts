@@ -62,7 +62,7 @@ export interface BillingTransaction {
   amount: number;
   clientName: string;
   time: string; // YYYY-MM-DD HH:mm:ss
-  method: 'Stripe' | 'Alipay' | 'WeChatPay';
+  method: 'Stripe' | 'Alipay' | 'WeChatPay' | 'PayPal';
   type: 'order_payment' | 'saas_subscription' | 'api_overage';
   status: 'pending' | 'settled' | 'refunded';
   tokenConsumed: number;

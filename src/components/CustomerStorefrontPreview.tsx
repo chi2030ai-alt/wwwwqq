@@ -67,12 +67,58 @@ export default function CustomerStorefrontPreview() {
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
-  const [selectedPayMethod, setSelectedPayMethod] = useState<'stripe' | 'alipay'>('stripe');
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'stripe' | 'alipay' | 'wechat' | 'paypal'>('stripe');
+  const [wechatQrUrl, setWechatQrUrl] = useState('');
+  const [paypalApprovalLink, setPaypalApprovalLink] = useState('');
+  const [currentPaymentOrderId, setCurrentPaymentOrderId] = useState('');
+  const [currentPaymentStatus, setCurrentPaymentStatus] = useState<'unknown' | 'pending' | 'processing' | 'shipped' | 'completed' | 'cancelled' | 'failed'>('unknown');
+  const [isPollingPaymentStatus, setIsPollingPaymentStatus] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  const refreshPaymentStatus = async (orderId: string) => {
+    if (!orderId) return;
+    try {
+      const response = await fetch(`/api/orders/${orderId}`);
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const data = await response.json();
+      if (data.success && data.order) {
+        setCurrentPaymentStatus(data.order.status || 'unknown');
+        if (data.order.status && data.order.status !== 'pending') {
+          setOrderSubmitted(true);
+          setShowPaymentModal(false);
+          setActiveTab('success');
+          setIsPaying(false);
+          showToast(`支付已确认：订单状态 ${data.order.status}`, 'success');
+        }
+      }
+    } catch (error: any) {
+      setCurrentPaymentStatus('failed');
+      console.warn('Refresh payment status failed', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!currentPaymentOrderId || (selectedPayMethod !== 'wechat' && selectedPayMethod !== 'paypal')) {
+      return;
+    }
+
+    setIsPollingPaymentStatus(true);
+    const poll = async () => {
+      await refreshPaymentStatus(currentPaymentOrderId);
+    };
+    poll();
+    const interval = setInterval(poll, 8000);
+    return () => {
+      clearInterval(interval);
+      setIsPollingPaymentStatus(false);
+    };
+  }, [currentPaymentOrderId, selectedPayMethod]);
 
   // Multi-device synchronization & Real interactive support state configuration
   const [searchQuery, setSearchQuery] = useState('');
@@ -810,24 +856,23 @@ export default function CustomerStorefrontPreview() {
 
                       {/* Payment Method Selector */}
                       <div className="grid grid-cols-2 gap-2 text-center">
-                        <button 
-                          type="button"
-                          onClick={() => setSelectedPayMethod('stripe')}
-                          className={`py-1.5 rounded-xl border text-[8px] font-bold flex flex-col items-center justify-center space-y-1 ${
-                            selectedPayMethod === 'stripe' ? 'bg-[#635BFF]/10 text-[#635BFF] border-[#635BFF]' : 'bg-transparent text-zinc-450 border-zinc-900 shadow-sm'
-                          }`}
-                        >
-                          <span>💳 Stripe (国际卡)</span>
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => setSelectedPayMethod('alipay')}
-                          className={`py-1.5 rounded-xl border text-[8px] font-bold flex flex-col items-center justify-center space-y-1 ${
-                            selectedPayMethod === 'alipay' ? 'bg-[#1D9BF0]/10 text-[#1D9BF0] border-[#1D9BF0]' : 'bg-transparent text-zinc-450 border-zinc-900 shadow-sm'
-                          }`}
-                        >
-                          <span>📱 支付宝 / 微信扫码</span>
-                        </button>
+                        {[
+                          { id: 'stripe', label: '💳 Stripe (国际卡)', activeClass: 'bg-[#635BFF]/10 text-[#635BFF] border-[#635BFF]' },
+                          { id: 'alipay', label: '📱 Alipay', activeClass: 'bg-[#1D9BF0]/10 text-[#1D9BF0] border-[#1D9BF0]' },
+                          { id: 'wechat', label: '🟢 WeChat Pay', activeClass: 'bg-[#1EB23B]/10 text-[#1EB23B] border-[#1EB23B]' },
+                          { id: 'paypal', label: '🅿️ PayPal', activeClass: 'bg-[#003087]/10 text-[#003087] border-[#003087]' }
+                        ].map((pay) => (
+                          <button
+                            key={pay.id}
+                            type="button"
+                            onClick={() => setSelectedPayMethod(pay.id as any)}
+                            className={`py-1.5 rounded-xl border text-[8px] font-bold flex flex-col items-center justify-center space-y-1 ${
+                              selectedPayMethod === pay.id ? pay.activeClass : 'bg-transparent text-zinc-450 border-zinc-900 shadow-sm'
+                            }`}
+                          >
+                            <span>{pay.label}</span>
+                          </button>
+                        ))}
                       </div>
 
                       {/* Form Inputs based on method selector */}
@@ -835,8 +880,8 @@ export default function CustomerStorefrontPreview() {
                         <div className="space-y-2 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-805/80 font-sans text-[8.5px]">
                           <div className="space-y-0.5">
                             <label className="text-[7px] text-zinc-500 font-mono">卡号 (Card Number)</label>
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               readOnly
                               value="4242 •••• •••• 4242"
                               className="w-full bg-black/50 border border-zinc-800 rounded p-1 text-[8px] font-mono text-zinc-300 focus:outline-none cursor-not-allowed"
@@ -845,8 +890,8 @@ export default function CustomerStorefrontPreview() {
                           <div className="grid grid-cols-2 gap-2">
                             <div className="space-y-0.5">
                               <label className="text-[7px] text-zinc-500 font-mono">有效期 (Expiry)</label>
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 readOnly
                                 value="12 / 29"
                                 className="w-full bg-black/50 border border-zinc-800 rounded p-1 text-[8px] font-mono text-zinc-300 focus:outline-none cursor-not-allowed"
@@ -854,8 +899,8 @@ export default function CustomerStorefrontPreview() {
                             </div>
                             <div className="space-y-0.5">
                               <label className="text-[7px] text-zinc-500 font-mono">安全码 (CVC)</label>
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 readOnly
                                 value="***"
                                 className="w-full bg-black/50 border border-zinc-800 rounded p-1 text-[8px] font-mono text-zinc-300 focus:outline-none cursor-not-allowed"
@@ -864,13 +909,63 @@ export default function CustomerStorefrontPreview() {
                           </div>
                           <span className="text-[7px] text-zinc-550 block text-center">🔐 SSL Secured • Stripe sandbox enabled</span>
                         </div>
-                      ) : (
+                      ) : selectedPayMethod === 'alipay' ? (
                         <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-850 text-center space-y-2">
                           <div className="w-20 h-20 mx-auto bg-white p-1 rounded-md flex items-center justify-center relative">
                             <div className="absolute inset-1 bg-gradient-to-br from-[#1D9BF0] to-teal-400 opacity-10 animate-pulse" />
                             <span className="text-[10px] relative z-10 font-bold text-sky-600 font-mono">SCAN TO PAY</span>
                           </div>
                           <p className="text-[7.5px] text-zinc-400 leading-normal">已自动绑定您的付款账单进行极速二维码算力汇兑，支持国内一键扫描安全扣减。</p>
+                        </div>
+                      ) : selectedPayMethod === 'wechat' ? (
+                        <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-850 text-center space-y-3">
+                          <div className="w-24 h-24 mx-auto rounded-2xl bg-white p-3 flex items-center justify-center">
+                            {wechatQrUrl ? (
+                              <img src={wechatQrUrl} alt="WeChat Pay QR" className="h-full w-full object-contain" />
+                            ) : (
+                              <span className="text-[9px] font-bold text-[#059E3E]">生成微信支付二维码</span>
+                            )}
+                          </div>
+                          <p className="text-[7.5px] text-zinc-400">请使用微信扫码二维码完成支付，支付后系统将自动回调并更新订单状态。</p>
+                          <div className="space-y-1 text-left text-[8px] text-zinc-300">
+                            <div>订单号：{currentPaymentOrderId || '尚未生成'}</div>
+                            <div>当前状态：{currentPaymentStatus}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => refreshPaymentStatus(currentPaymentOrderId)}
+                            className="inline-flex items-center justify-center rounded-full bg-[#059E3E] px-3 py-1 text-[8.5px] font-bold text-white"
+                          >
+                            刷新支付状态
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-850 text-center space-y-3">
+                          <div className="w-24 h-24 mx-auto rounded-2xl bg-white p-3 flex items-center justify-center">
+                            <span className="text-[10px] font-bold text-[#003087]">PayPal</span>
+                          </div>
+                          <p className="text-[7.5px] text-zinc-400">点击下方按钮进入 PayPal 结账页面，完成支付后可返回本页面查看状态。</p>
+                          {paypalApprovalLink ? (
+                            <a
+                              href={paypalApprovalLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-block px-3 py-1 rounded-full bg-[#003087] text-white text-[8.5px] font-bold"
+                            >
+                              打开 PayPal 付款页面
+                            </a>
+                          ) : null}
+                          <div className="space-y-1 text-left text-[8px] text-zinc-300">
+                            <div>订单号：{currentPaymentOrderId || '尚未生成'}</div>
+                            <div>当前状态：{currentPaymentStatus}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => refreshPaymentStatus(currentPaymentOrderId)}
+                            className="inline-flex items-center justify-center rounded-full bg-[#003087] px-3 py-1 text-[8.5px] font-bold text-white"
+                          >
+                            刷新支付状态
+                          </button>
                         </div>
                       )}
 
@@ -897,34 +992,29 @@ export default function CustomerStorefrontPreview() {
                       disabled={isPaying}
                       onClick={async () => {
                         setIsPaying(true);
-                        showToast('💳 Stripe 金流支付安全认证通道握手中...', 'info');
+                        const localTenantId = localStorage.getItem('preview_tenant_id') || 'default_tenant';
+                        const localIndustryId = localStorage.getItem('preview_industry_id') || 'catering';
+                        const newOrderId = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+                        const desc = customerCart.map(it => `${it.name} x ${it.quantity}`).join(', ');
+                        const total = getCartTotal();
 
-                        setTimeout(async () => {
-                          try {
-                            const localTenantId = localStorage.getItem('preview_tenant_id') || 'default_tenant';
-                            const localIndustryId = localStorage.getItem('preview_industry_id') || 'catering';
-                            const newOrderId = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-                            const desc = customerCart.map(it => `${it.name} x ${it.quantity}`).join(', ');
-                            const total = getCartTotal();
-
-                            // 1. Prepare and submit main storefront order matching schema
+                        try {
+                          if (selectedPayMethod === 'stripe') {
+                            showToast('💳 Stripe 金流支付安全认证通道握手中...', 'info');
                             const orderToSave = {
                               id: newOrderId,
                               time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
                               location: orderType === 'takeout' ? deliveryAddress : 'B08桌',
                               desc,
                               price: total,
-                              status: 'paid', // Starts as paid!
+                              status: 'paid',
                               type: orderType,
                               customerName: '联合智点买家',
                               phone: '13910245678',
                               tracking: '顺丰自动配货中'
                             };
-
                             const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
                             await setDoc(orderDocRef, orderToSave);
-
-                            // 2. Prepare real-time SaaS corporate financial billing transaction ticket
                             const billingLogId = `SAAS-BILL-${Date.now()}`;
                             const billingLogRef = doc(db, 'tenants', localTenantId, 'billing_logs', billingLogId);
                             await setDoc(billingLogRef, {
@@ -933,33 +1023,161 @@ export default function CustomerStorefrontPreview() {
                               amount: total,
                               clientName: '联合智点买家',
                               time: new Date().toISOString().substring(0, 19).replace('T', ' '),
-                              method: selectedPayMethod === 'stripe' ? 'Stripe (Visa/Master)' : 'Alipay',
+                              method: 'Stripe (Visa/Master)',
                               type: 'order_payment',
                               status: 'settled',
                               tokenConsumed: Math.floor(total * 8 + 15),
                               description: `完成店面消费订单付款扣减，商品: ${desc}`
                             });
-
-                            console.log("Successfully recorded real secure payment transaction ticket & order: ", billingLogId);
                             showToast('🎉 Stripe 安全结算收银成功！您的代运营团队已极速跟进派单出货！', 'success');
-
-                            // Switch screens
                             setOrderSubmitted(true);
                             setCustomerCart([]);
                             setShowPaymentModal(false);
-                            setIsPaying(false);
                             setActiveTab('success');
-
-                          } catch (err: any) {
-                            console.error("Payment secure backend sync failed:", err);
-                            showToast("支付结算通道出现未决异常: " + err.message, 'error');
-                            setIsPaying(false);
+                          } else if (selectedPayMethod === 'alipay') {
+                            showToast('📱 Alipay 二维码生成中，请准备扫码支付...', 'info');
+                            const orderToSave = {
+                              id: newOrderId,
+                              time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+                              location: orderType === 'takeout' ? deliveryAddress : 'B08桌',
+                              desc,
+                              price: total,
+                              status: 'paid',
+                              type: orderType,
+                              customerName: '联合智点买家',
+                              phone: '13910245678',
+                              tracking: '顺丰自动配货中'
+                            };
+                            const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
+                            await setDoc(orderDocRef, orderToSave);
+                            const billingLogId = `SAAS-BILL-${Date.now()}`;
+                            const billingLogRef = doc(db, 'tenants', localTenantId, 'billing_logs', billingLogId);
+                            await setDoc(billingLogRef, {
+                              id: billingLogId,
+                              orderId: newOrderId,
+                              amount: total,
+                              clientName: '联合智点买家',
+                              time: new Date().toISOString().substring(0, 19).replace('T', ' '),
+                              method: 'Alipay',
+                              type: 'order_payment',
+                              status: 'settled',
+                              tokenConsumed: Math.floor(total * 8 + 15),
+                              description: `完成店面消费订单付款扣减，商品: ${desc}`
+                            });
+                            showToast('✅ Alipay 支付已确认，系统已完成订单发起。', 'success');
+                            setOrderSubmitted(true);
+                            setCustomerCart([]);
+                            setShowPaymentModal(false);
+                            setActiveTab('success');
+                          } else if (selectedPayMethod === 'wechat') {
+                            showToast('⌛ 微信扫码支付请求已发送，二维码生成中...', 'info');
+                            const response = await fetch('/api/payments/wechat/checkout', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ orderId: newOrderId, amount: total })
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                              setWechatQrUrl(data.qrCode || '');
+                              setCurrentPaymentOrderId(newOrderId);
+                              setCurrentPaymentStatus('pending');
+                              await fetch('/api/orders', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  orderId: newOrderId,
+                                  userId: localTenantId,
+                                  storeId: localIndustryId,
+                                  merchantId: localTenantId,
+                                  items: customerCart.map((it) => ({ productId: it.id, productName: it.name, price: it.price, quantity: it.quantity })),
+                                  totalPrice: total,
+                                  orderType,
+                                  deliveryAddress
+                                })
+                              });
+                              const orderToSave = {
+                                id: newOrderId,
+                                time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+                                location: orderType === 'takeout' ? deliveryAddress : 'B08桌',
+                                desc,
+                                price: total,
+                                status: 'pending',
+                                type: orderType,
+                                customerName: '联合智点买家',
+                                phone: '13910245678',
+                                tracking: '等待微信支付完成'
+                              };
+                              const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
+                              await setDoc(orderDocRef, orderToSave);
+                              showToast('✅ 已生成微信支付二维码，请扫码完成支付。', 'success');
+                            } else {
+                              throw new Error(data.error || '微信支付二维码生成失败');
+                            }
+                          } else if (selectedPayMethod === 'paypal') {
+                            showToast('⌛ PayPal 结账跳转准备中...', 'info');
+                            const response = await fetch('/api/payments/paypal/checkout', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                orderId: newOrderId,
+                                amount: total,
+                                items: customerCart.map((it) => ({ name: it.name, quantity: it.quantity, price: it.price }))
+                              })
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                              setPaypalApprovalLink(data.approvalLink || '');
+                              setCurrentPaymentOrderId(newOrderId);
+                              setCurrentPaymentStatus('pending');
+                              await fetch('/api/orders', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  orderId: newOrderId,
+                                  userId: localTenantId,
+                                  storeId: localIndustryId,
+                                  merchantId: localTenantId,
+                                  items: customerCart.map((it) => ({ productId: it.id, productName: it.name, price: it.price, quantity: it.quantity })),
+                                  totalPrice: total,
+                                  orderType,
+                                  deliveryAddress
+                                })
+                              });
+                              const orderToSave = {
+                                id: newOrderId,
+                                time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+                                location: orderType === 'takeout' ? deliveryAddress : 'B08桌',
+                                desc,
+                                price: total,
+                                status: 'pending',
+                                type: orderType,
+                                customerName: '联合智点买家',
+                                phone: '13910245678',
+                                tracking: '等待 PayPal 支付完成'
+                              };
+                              const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
+                              await setDoc(orderDocRef, orderToSave);
+                              if (data.approvalLink) {
+                                window.open(data.approvalLink, '_blank');
+                              }
+                              showToast('✅ PayPal 结账页面已打开，请完成支付。', 'success');
+                            } else {
+                              throw new Error(data.error || 'PayPal checkout failed');
+                            }
                           }
-                        }, 1600);
+                          setCustomerCart(selectedPayMethod === 'stripe' || selectedPayMethod === 'alipay' ? [] : customerCart);
+                          setShowPaymentModal(selectedPayMethod === 'stripe' || selectedPayMethod === 'alipay' ? false : true);
+                          setActiveTab(selectedPayMethod === 'stripe' || selectedPayMethod === 'alipay' ? 'success' : 'cart');
+                          setIsPaying(false);
+                        } catch (err: any) {
+                          console.error('Payment secure backend sync failed:', err);
+                          showToast('支付结算通道出现未决异常: ' + err.message, 'error');
+                          setIsPaying(false);
+                        }
                       }}
                       className={`w-full py-2 rounded-lg font-bold text-xs shadow-md uppercase transition-all text-center flex items-center justify-center space-x-1 ${
-                        isPaying 
-                          ? 'bg-[#635BFF]/30 text-[#635BFF] cursor-not-allowed' 
+                        isPaying
+                          ? 'bg-[#635BFF]/30 text-[#635BFF] cursor-not-allowed'
                           : 'bg-[#635BFF] hover:bg-[#4F46E5] text-white cursor-pointer hover:scale-[1.01]'
                       }`}
                     >

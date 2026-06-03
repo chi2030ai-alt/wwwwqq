@@ -185,8 +185,52 @@ export const apiService = {
       return handleResponse(res);
     },
 
+    async wechatCheckout(tenantId: string, amount: number, metadata: any) {
+      const res = await fetch('/api/payments/wechat/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, amount, ...metadata })
+      });
+      return handleResponse(res);
+    },
+
+    async paypalCheckout(tenantId: string, amount: number, metadata: any) {
+      const res = await fetch('/api/payments/paypal/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, amount, ...metadata })
+      });
+      return handleResponse(res);
+    },
+
     async getLedger(tenantId: string): Promise<{ success: boolean; logs: BillingTransaction[] }> {
       const res = await fetch(`/api/finance/ledger?tenantId=${tenantId}`);
+      return handleResponse(res);
+    }
+  },
+
+  // === Extended LLM Service Integrations ===
+  llm: {
+    async openaiGenerate(prompt: string, model = 'gpt-4') {
+      const res = await fetch('/api/ai/openai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model })
+      });
+      return handleResponse(res);
+    },
+
+    async ollamaGenerate(prompt: string, model = 'llama2') {
+      const res = await fetch('/api/ai/ollama/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model })
+      });
+      return handleResponse(res);
+    },
+
+    async getLangChainAgent() {
+      const res = await fetch('/api/ai/langchain/agent');
       return handleResponse(res);
     }
   },

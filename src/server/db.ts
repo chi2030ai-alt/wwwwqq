@@ -103,7 +103,7 @@ export interface DBPaymentRecord {
   id: string;
   orderId: string;
   amount: number;
-  method: 'Stripe' | 'Alipay';
+  method: 'Stripe' | 'Alipay' | 'WeChatPay' | 'PayPal';
   status: 'pending' | 'succeeded' | 'failed' | 'refunded';
   transactionId: string;
   createdAt: string;
