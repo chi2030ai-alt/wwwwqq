@@ -5,7 +5,12 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import Stripe from "stripe";
+import { Payment, middleware as wechatMiddleware } from "wechat-pay";
+import * as paypalCheckoutServerSDK from "@paypal/checkout-server-sdk";
 import { ModaDB } from "./src/server/db";
+import { generateWithOpenAI } from "./src/services/openai.service";
+import { createLangChainAgent } from "./src/services/langchain.service";
+import { generateWithOllama } from "./src/services/ollama.service";
 
 // Initialize Firebase client for server backup & live cloud persistence syncing
 import { initializeApp } from "firebase/app";
@@ -617,6 +622,21 @@ async function startServer() {
     }
   });
 
+  app.get("/api/orders/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const db = ModaDB.read();
+      const order = db.orders.find(o => o.id === id);
+      if (!order) {
+        res.status(404).json({ success: false, error: "Order not found." });
+        return;
+      }
+      res.json({ success: true, order });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.post("/api/orders", (req, res) => {
     try {
       const { userId, storeId, merchantId, items, totalPrice, orderType = "takeout", deliveryAddress } = req.body;
@@ -625,7 +645,8 @@ async function startServer() {
         return;
       }
       const db = ModaDB.read();
-      const orderId = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { orderId: providedOrderId } = req.body;
+      const orderId = providedOrderId || `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
       const newOrder = {
         id: orderId,
         userId: userId || "guest_user",
@@ -855,6 +876,214 @@ async function startServer() {
       res.json({ success: true, txnId: mockPayId, message: "Alipay mobile layout parsed. Successful callback webhook applied." });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // === WeChat Pay (Native QR Code) ===
+  app.post("/api/payments/wechat/checkout", async (req, res) => {
+    try {
+      const { orderId, amount } = req.body;
+      if (!orderId || !amount) {
+        res.status(400).json({ success: false, error: "orderId and amount are required." });
+        return;
+      }
+
+      const wechatPayment = new Payment({
+        partnerKey: process.env.WECHAT_API_KEY || "",
+        appId: process.env.WECHAT_APP_ID || "",
+        mchId: process.env.WECHAT_MCH_ID || "",
+        notifyUrl: `${process.env.API_BASE_URL || `${req.protocol}://${req.get('host')}`}/api/payments/wechat/callback`
+      });
+
+      const order = {
+        body: `MODAUI 订单 ${orderId}`,
+        out_trade_no: orderId,
+        total_fee: Math.round(Number(amount) * 100),
+        spbill_create_ip: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+        trade_type: 'NATIVE'
+      };
+
+      const response = await new Promise<any>((resolve, reject) => {
+        wechatPayment.getBrandWCPayRequestParams(order, (err: any, result: any) => {
+          if (err) return reject(err);
+          resolve(result);
+        });
+      });
+
+      res.json({ success: true, qrCode: response.code_url || response.codeUrl || '', prepayId: response.prepay_id || response.package, data: response });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/payments/wechat/callback", wechatMiddleware({
+    partnerKey: process.env.WECHAT_API_KEY || "",
+    appId: process.env.WECHAT_APP_ID || "",
+    mchId: process.env.WECHAT_MCH_ID || "",
+    notifyUrl: `${process.env.API_BASE_URL || "http://localhost:3000"}/api/payments/wechat/callback`
+  }).getNotify().done(async (message: any, req: any, res: any, next: any) => {
+    const outTradeNo = message.out_trade_no;
+    const transactionId = message.transaction_id;
+    const totalFee = Number(message.total_fee || 0);
+
+    const db = ModaDB.read();
+    const order = db.orders.find(o => o.id === outTradeNo);
+    if (order) {
+      order.status = 'processing';
+      if (!order.shipmentTracking) {
+        order.shipmentTracking = { carrier: 'WeChatPay', trackingNumber: transactionId, status: '微信支付已确认，等待发货' };
+      }
+      db.payments.push({
+        id: `pay_${Math.random().toString(36).slice(2, 11)}`,
+        orderId: outTradeNo,
+        amount: totalFee / 100,
+        method: 'WeChatPay',
+        status: 'succeeded',
+        transactionId,
+        createdAt: new Date().toISOString()
+      });
+      db.finance.push({
+        id: `FIN-${Math.floor(100000 + Math.random() * 900000)}`,
+        merchantId: order.merchantId,
+        type: 'revenue',
+        amount: totalFee / 100,
+        orderId: outTradeNo,
+        description: `微信扫码支付完成：${outTradeNo}`,
+        createdAt: new Date().toISOString()
+      });
+      ModaDB.write(db);
+    }
+
+    res.reply('success');
+  }));
+
+  // === PayPal Checkout ===
+  const paypalEnvironment = new paypalCheckoutServerSDK.core.SandboxEnvironment(
+    process.env.PAYPAL_CLIENT_ID || '',
+    process.env.PAYPAL_CLIENT_SECRET || ''
+  );
+  const paypalClient = new paypalCheckoutServerSDK.core.PayPalHttpClient(paypalEnvironment);
+
+  app.post("/api/payments/paypal/checkout", async (req, res) => {
+    try {
+      const { orderId, amount, items = [] } = req.body;
+      if (!orderId || !amount) {
+        res.status(400).json({ success: false, error: 'orderId and amount are required.' });
+        return;
+      }
+
+      const request = new paypalCheckoutServerSDK.orders.OrdersCreateRequest();
+      request.headers['prefer'] = 'return=representation';
+      request.requestBody({
+        intent: 'CAPTURE',
+        purchase_units: [
+          {
+            reference_id: orderId,
+            amount: {
+              currency_code: 'USD',
+              value: Number(amount).toFixed(2)
+            },
+            items: items.map((it: any) => ({
+              name: it.name,
+              unit_amount: {
+                currency_code: 'USD',
+                value: Number((it.price / Math.max(it.quantity || 1, 1))).toFixed(2)
+              },
+              quantity: it.quantity?.toString() || '1'
+            }))
+          }
+        ],
+        application_context: {
+          return_url: `${process.env.API_BASE_URL || `${req.protocol}://${req.get('host')}`}/api/payments/paypal/success`,
+          cancel_url: `${process.env.API_BASE_URL || `${req.protocol}://${req.get('host')}`}/api/payments/paypal/cancel`
+        }
+      });
+
+      const response = await paypalClient.execute(request);
+      const approvalLink = response.result.links?.find((l: any) => l.rel === 'approve')?.href;
+      res.json({ success: true, orderId: response.result.id, approvalLink });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/payments/paypal/success', async (req, res) => {
+    try {
+      const { token } = req.query;
+      if (!token) {
+        res.status(400).send('Missing PayPal token');
+        return;
+      }
+      const request = new paypalCheckoutServerSDK.orders.OrdersCaptureRequest(token as string);
+      request.requestBody({});
+      const capture = await paypalClient.execute(request);
+      const purchaseUnit = capture.result?.purchase_units?.[0];
+      const referenceId = purchaseUnit?.reference_id as string || '';
+      const captureAmount = Number(purchaseUnit?.payments?.captures?.[0]?.amount?.value || 0);
+      const transactionId = token as string;
+
+      const db = ModaDB.read();
+      let order = db.orders.find(o => o.id === referenceId);
+      if (!order) {
+        order = db.orders.find(o => o.id === transactionId);
+      }
+      if (order) {
+        order.status = 'processing';
+        if (!order.shipmentTracking) {
+          order.shipmentTracking = { carrier: 'PayPal', trackingNumber: transactionId, status: 'PayPal 支付完成，等待发货' };
+        }
+      }
+
+      let payment = db.payments.find(p => p.transactionId === transactionId);
+      if (payment) {
+        payment.status = 'succeeded';
+        payment.amount = payment.amount || captureAmount;
+        payment.orderId = payment.orderId || referenceId;
+      } else {
+        db.payments.push({
+          id: `pay_${Math.random().toString(36).slice(2, 11)}`,
+          orderId: referenceId || transactionId,
+          amount: captureAmount,
+          method: 'PayPal',
+          status: 'succeeded',
+          transactionId,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      if (order) {
+        db.finance.push({
+          id: `FIN-${Math.floor(100000 + Math.random() * 900000)}`,
+          merchantId: order.merchantId,
+          type: 'revenue',
+          amount: captureAmount,
+          orderId: order.id,
+          description: `PayPal 交易完成：${order.id}`,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      ModaDB.write(db);
+      res.json({ success: true, capture: capture.result, orderId: referenceId || transactionId });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/payments/paypal/cancel', async (req, res) => {
+    try {
+      const { token } = req.query;
+      if (token) {
+        const db = ModaDB.read();
+        const payment = db.payments.find(p => p.transactionId === token);
+        if (payment) {
+          payment.status = 'failed';
+          ModaDB.write(db);
+        }
+      }
+      res.json({ success: false, cancelled: true, message: 'PayPal checkout cancelled by user.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -1310,6 +1539,44 @@ async function startServer() {
       }
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
+  // === 11. EXTENDED LLM SERVICE APIs ===
+  app.post("/api/ai/openai/generate", async (req, res) => {
+    try {
+      const { prompt, model = "gpt-4" } = req.body;
+      if (!prompt) {
+        res.status(400).json({ success: false, error: "Prompt is required." });
+        return;
+      }
+      const output = await generateWithOpenAI(prompt, model);
+      res.json({ success: true, output, provider: "openai", model });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/ai/langchain/agent", async (req, res) => {
+    try {
+      const agent = createLangChainAgent();
+      res.json({ success: true, provider: "langchain", model: "gemini-pro", status: "ready", hint: "Use this agent to orchestrate chained Gemini workflows." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/ai/ollama/generate", async (req, res) => {
+    try {
+      const { prompt, model = "llama2" } = req.body;
+      if (!prompt) {
+        res.status(400).json({ success: false, error: "Prompt is required." });
+        return;
+      }
+      const output = await generateWithOllama(prompt, model);
+      res.json({ success: true, output, provider: "ollama", model });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
