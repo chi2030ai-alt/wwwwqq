@@ -4,6 +4,7 @@ import {
   Cpu, Terminal, Sliders, Settings, Zap, ArrowLeft, ArrowRight, Database, 
   Code, Clock, BookOpen, Shield, HardDrive, BarChart2, Activity, Wifi
 } from 'lucide-react';
+import { auth } from '../services/firebase';
 
 // Import our newly created modular specialized engines
 import MarkItDownHub from './MarkItDownHub';
@@ -368,23 +369,55 @@ export default function AIRuntimeView({ onBackToLanding }: { onBackToLanding: ()
     handleAddLog(`【任务调度】热部署注册新计划任务：${newCronName} [${newCronExpr}] 优先级: ${newCronPriority} 🟢`);
   };
 
-  const handleTriggerCronNow = (id: string) => {
+  const handleTriggerCronNow = async (id: string) => {
+    const job = crons.find(c => c.id === id);
+    if (!job) return;
+
     setCrons(prev => prev.map(c => {
       if (c.id === id) {
-        return { ...c, status: 'running', lastRun: '刚刚手动触发' };
+        return { ...c, status: 'running', lastRun: '正在调协 Gemini 算力...' };
       }
       return c;
     }));
-    const jobName = crons.find(c => c.id === id)?.name || '';
-    handleAddLog(`【强行唤醒】[ASYNC TASK TRIGGER] 立刻强行调用后台任务：<${jobName}> 进行结账审计... OK`);
-    setTimeout(() => {
+
+    const userEmail = auth.currentUser?.email;
+    const tenantId = userEmail ? userEmail.replace(/[^a-zA-Z0-9]/g, '_') : 'default_tenant';
+    
+    handleAddLog(`【强行唤醒】[ASYNC TASK TRIGGER] 立刻强行调用后台任务：<${job.name}> 进行实地理算并同步云 Firestore...`);
+
+    try {
+      const response = await fetch('/api/agents/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: job.assignee || 'Soren (运营综合)',
+          teamId: 'cron_scheduler_team',
+          inputMessage: `计划任务执行启动：${job.task}`,
+          rolePrompt: `你是一个摩整数字员工智能工作工作站。针对创始人调度的定时时段任务，结合你所属的专业岗位，输出精准的代运营和结账审计理算。`,
+          tenantId
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        handleAddLog(`【智体响应】《${job.name}》实数理算成果：\n${data.response}`);
+        setCrons(prev => prev.map(c => {
+          if (c.id === id) {
+            return { ...c, status: 'idle', lastRun: '执行完毕 (已同步至 Firestore)' };
+          }
+          return c;
+        }));
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (e: any) {
+      handleAddLog(`【调度警报】时辰任务调度阻碍失败: ${e.message}`);
       setCrons(prev => prev.map(c => {
         if (c.id === id) {
-          return { ...c, status: 'idle' };
+          return { ...c, status: 'idle', lastRun: '运行失败' };
         }
         return c;
       }));
-    }, 1200);
+    }
   };
 
   // 6. Memory Engine (Long-term / Short-term Vector Embedding indexer)

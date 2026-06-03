@@ -65,6 +65,10 @@ export default function CustomerStorefrontPreview() {
   const [orderType, setOrderType] = useState<'takeout' | 'dine_in'>('takeout');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'stripe' | 'alipay'>('stripe');
+
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -233,7 +237,7 @@ export default function CustomerStorefrontPreview() {
     }
   }, [chatMessages, isTyping]);
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
     const userMsg = {
       id: `u-${Date.now()}`,
@@ -245,9 +249,41 @@ export default function CustomerStorefrontPreview() {
     setIsTyping(true);
     setUserMsgInput('');
 
+    const agent = getSupportAgent(industryId);
+    const localTenantId = localStorage.getItem('preview_tenant_id') || 'default_tenant';
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          employeeName: agent.name,
+          employeeRole: agent.desc,
+          industryTagline: headline,
+          strategyName: '自主深度托管模式 (Full-Auto)',
+          strategyDesc: '深度结合 RAG 向量智库实时应答，全额理算。',
+          tenantId: localTenantId
+        })
+      });
+      const data = await response.json();
+      if (data.success && data.reply) {
+        setChatMessages((prev) => [...prev, {
+          id: `a-${Date.now()}`,
+          sender: 'agent',
+          text: data.reply,
+          timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        }]);
+        setIsTyping(false);
+        return;
+      }
+    } catch (err: any) {
+      console.warn("Backend chat call failed, triggers offline smart fallback: ", err.message);
+    }
+
+    // Interactive fallback smart rule catalog matches
     setTimeout(() => {
       const lowerText = text.toLowerCase();
-      const agent = getSupportAgent(industryId);
       let reply = '';
 
       if (lowerText.includes('推荐') || lowerText.includes('招牌') || lowerText.includes('卖得好') || lowerText.includes('最火') || lowerText.includes('推荐一下')) {
@@ -261,7 +297,7 @@ export default function CustomerStorefrontPreview() {
           reply = `我们的核心定价非常透明亲民，同时本店铺有全线安全假一损一和免单大红包权益保障，您可以放心直接在右端点单买单哦！`;
         }
       } else if (lowerText.includes('送') || lowerText.includes('物流') || lowerText.includes('发货') || lowerText.includes('多长时间') || lowerText.includes('到货')) {
-        reply = `我们默认配发【顺丰同城急送】与【航空保价物流】。对于同城用户，AI 运营系统会在 1 秒内响应自动出货揽件，30 分钟内送达，大件重货直接免费搬运上楼！`;
+        reply = `我们默认配发【顺丰同城急送】与【航空保价物流】。对于同城用户，AI 运营系统会在 1秒内响应自动出货揽件，30 分钟内送达，大件重货直接免费搬运上楼！`;
       } else if (lowerText.includes('你好') || lowerText.includes('在吗') || lowerText.includes('开店') || lowerText.includes('哈喽') || lowerText.includes('有人吗')) {
         reply = `您好！我是您的 24 小时 AI 智能助理 ${agent.name}，很高兴为您服务！对我们的商品规格、发货时效、折扣、定制细节等，我都能极速回答。`;
       } else {
@@ -719,40 +755,9 @@ export default function CustomerStorefrontPreview() {
                             </div>
 
                              <button 
-                              onClick={async () => {
-                                try {
-                                  const localTenantId = localStorage.getItem('preview_tenant_id') || 'default_tenant';
-                                  const localIndustryId = localStorage.getItem('preview_industry_id') || 'catering';
-                                  const newOrderId = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-                                  const desc = customerCart.map(it => `${it.name} x ${it.quantity}`).join(', ');
-                                  const total = getCartTotal();
-
-                                  // Prepare a structured order entity matching Firestore Blueprint schema
-                                  const orderToSave = {
-                                    id: newOrderId,
-                                    time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-                                    location: orderType === 'takeout' ? deliveryAddress : 'B08桌',
-                                    desc,
-                                    price: total,
-                                    status: 'pending',
-                                    type: orderType,
-                                    customerName: '联合智点客户',
-                                    phone: '13910245678',
-                                    tracking: '未处理'
-                                  };
-
-                                  const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
-                                  await setDoc(orderDocRef, orderToSave);
-                                  console.log("Successfully submitted live tenant order to Firestore: ", newOrderId);
-                                } catch (err) {
-                                  console.error("Failed to push tenant order to Firestore: ", err);
-                                }
-
-                                setOrderSubmitted(true);
-                                setCustomerCart([]);
-                                setActiveTab('success');
-                              }}
-                              className="w-full py-1.5 bg-[#1D9BF0] hover:bg-emerald-600 text-white font-bold text-[8.5px] rounded-lg shadow-md uppercase"
+                              type="button"
+                              onClick={() => setShowPaymentModal(true)}
+                              className="w-full py-1.5 bg-[#1D9BF0] hover:bg-emerald-600 text-white font-bold text-[8.5px] rounded-lg shadow-md uppercase transition-all"
                             >
                               🚀 立即支付 / Submit Link
                             </button>
@@ -787,6 +792,188 @@ export default function CustomerStorefrontPreview() {
                   )}
 
                 </div>
+
+                {showPaymentModal && (
+                  <div className="absolute inset-x-0 bottom-0 top-[20px] bg-zinc-950 z-45 flex flex-col p-4 text-left justify-between animate-fadeIn border-t border-zinc-800 rounded-t-3xl">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
+                        <span className="text-[11px] font-black text-white flex items-center space-x-1">
+                          <span>💳 Stripe 安全结算中心</span>
+                        </span>
+                        <button 
+                          onClick={() => setShowPaymentModal(false)}
+                          className="text-zinc-400 hover:text-white font-bold text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Payment Method Selector */}
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedPayMethod('stripe')}
+                          className={`py-1.5 rounded-xl border text-[8px] font-bold flex flex-col items-center justify-center space-y-1 ${
+                            selectedPayMethod === 'stripe' ? 'bg-[#635BFF]/10 text-[#635BFF] border-[#635BFF]' : 'bg-transparent text-zinc-450 border-zinc-900 shadow-sm'
+                          }`}
+                        >
+                          <span>💳 Stripe (国际卡)</span>
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedPayMethod('alipay')}
+                          className={`py-1.5 rounded-xl border text-[8px] font-bold flex flex-col items-center justify-center space-y-1 ${
+                            selectedPayMethod === 'alipay' ? 'bg-[#1D9BF0]/10 text-[#1D9BF0] border-[#1D9BF0]' : 'bg-transparent text-zinc-450 border-zinc-900 shadow-sm'
+                          }`}
+                        >
+                          <span>📱 支付宝 / 微信扫码</span>
+                        </button>
+                      </div>
+
+                      {/* Form Inputs based on method selector */}
+                      {selectedPayMethod === 'stripe' ? (
+                        <div className="space-y-2 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-805/80 font-sans text-[8.5px]">
+                          <div className="space-y-0.5">
+                            <label className="text-[7px] text-zinc-500 font-mono">卡号 (Card Number)</label>
+                            <input 
+                              type="text" 
+                              readOnly
+                              value="4242 •••• •••• 4242"
+                              className="w-full bg-black/50 border border-zinc-800 rounded p-1 text-[8px] font-mono text-zinc-300 focus:outline-none cursor-not-allowed"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-0.5">
+                              <label className="text-[7px] text-zinc-500 font-mono">有效期 (Expiry)</label>
+                              <input 
+                                type="text" 
+                                readOnly
+                                value="12 / 29"
+                                className="w-full bg-black/50 border border-zinc-800 rounded p-1 text-[8px] font-mono text-zinc-300 focus:outline-none cursor-not-allowed"
+                              />
+                            </div>
+                            <div className="space-y-0.5">
+                              <label className="text-[7px] text-zinc-500 font-mono">安全码 (CVC)</label>
+                              <input 
+                                type="text" 
+                                readOnly
+                                value="***"
+                                className="w-full bg-black/50 border border-zinc-800 rounded p-1 text-[8px] font-mono text-zinc-300 focus:outline-none cursor-not-allowed"
+                              />
+                            </div>
+                          </div>
+                          <span className="text-[7px] text-zinc-550 block text-center">🔐 SSL Secured • Stripe sandbox enabled</span>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-850 text-center space-y-2">
+                          <div className="w-20 h-20 mx-auto bg-white p-1 rounded-md flex items-center justify-center relative">
+                            <div className="absolute inset-1 bg-gradient-to-br from-[#1D9BF0] to-teal-400 opacity-10 animate-pulse" />
+                            <span className="text-[10px] relative z-10 font-bold text-sky-600 font-mono">SCAN TO PAY</span>
+                          </div>
+                          <p className="text-[7.5px] text-zinc-400 leading-normal">已自动绑定您的付款账单进行极速二维码算力汇兑，支持国内一键扫描安全扣减。</p>
+                        </div>
+                      )}
+
+                      <div className="space-y-1 font-mono text-[8.5px] border-t border-dashed border-zinc-900 pt-2 text-zinc-400 leading-normal">
+                        <div className="flex justify-between">
+                          <span>小计 (Subtotal):</span>
+                          <span>¥{(getCartTotal() + (couponApplied ? 12 : 0)).toFixed(2)}</span>
+                        </div>
+                        {couponApplied && (
+                          <div className="flex justify-between text-emerald-400">
+                            <span>红包抵扣 (Coupon):</span>
+                            <span>-¥12.00</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-black text-white text-[9.5px] pt-1 border-t border-zinc-900/40">
+                          <span>应付总计 (Payable Total):</span>
+                          <span className="text-amber-500 font-extrabold text-[10.5px]">¥{getCartTotal().toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isPaying}
+                      onClick={async () => {
+                        setIsPaying(true);
+                        showToast('💳 Stripe 金流支付安全认证通道握手中...', 'info');
+
+                        setTimeout(async () => {
+                          try {
+                            const localTenantId = localStorage.getItem('preview_tenant_id') || 'default_tenant';
+                            const localIndustryId = localStorage.getItem('preview_industry_id') || 'catering';
+                            const newOrderId = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+                            const desc = customerCart.map(it => `${it.name} x ${it.quantity}`).join(', ');
+                            const total = getCartTotal();
+
+                            // 1. Prepare and submit main storefront order matching schema
+                            const orderToSave = {
+                              id: newOrderId,
+                              time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+                              location: orderType === 'takeout' ? deliveryAddress : 'B08桌',
+                              desc,
+                              price: total,
+                              status: 'paid', // Starts as paid!
+                              type: orderType,
+                              customerName: '联合智点买家',
+                              phone: '13910245678',
+                              tracking: '顺丰自动配货中'
+                            };
+
+                            const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
+                            await setDoc(orderDocRef, orderToSave);
+
+                            // 2. Prepare real-time SaaS corporate financial billing transaction ticket
+                            const billingLogId = `SAAS-BILL-${Date.now()}`;
+                            const billingLogRef = doc(db, 'tenants', localTenantId, 'billing_logs', billingLogId);
+                            await setDoc(billingLogRef, {
+                              id: billingLogId,
+                              orderId: newOrderId,
+                              amount: total,
+                              clientName: '联合智点买家',
+                              time: new Date().toISOString().substring(0, 19).replace('T', ' '),
+                              method: selectedPayMethod === 'stripe' ? 'Stripe (Visa/Master)' : 'Alipay',
+                              type: 'order_payment',
+                              status: 'settled',
+                              tokenConsumed: Math.floor(total * 8 + 15),
+                              description: `完成店面消费订单付款扣减，商品: ${desc}`
+                            });
+
+                            console.log("Successfully recorded real secure payment transaction ticket & order: ", billingLogId);
+                            showToast('🎉 Stripe 安全结算收银成功！您的代运营团队已极速跟进派单出货！', 'success');
+
+                            // Switch screens
+                            setOrderSubmitted(true);
+                            setCustomerCart([]);
+                            setShowPaymentModal(false);
+                            setIsPaying(false);
+                            setActiveTab('success');
+
+                          } catch (err: any) {
+                            console.error("Payment secure backend sync failed:", err);
+                            showToast("支付结算通道出现未决异常: " + err.message, 'error');
+                            setIsPaying(false);
+                          }
+                        }, 1600);
+                      }}
+                      className={`w-full py-2 rounded-lg font-bold text-xs shadow-md uppercase transition-all text-center flex items-center justify-center space-x-1 ${
+                        isPaying 
+                          ? 'bg-[#635BFF]/30 text-[#635BFF] cursor-not-allowed' 
+                          : 'bg-[#635BFF] hover:bg-[#4F46E5] text-white cursor-pointer hover:scale-[1.01]'
+                      }`}
+                    >
+                      {isPaying ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" />
+                          <span>正在解算扣款...</span>
+                        </>
+                      ) : (
+                        <span>确认安全代付 ¥{getCartTotal().toFixed(2)}</span>
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* Simulated Smartphone bottom navigation bar */}
                 <div className="absolute bottom-0 inset-x-0 h-11 bg-zinc-950 border-t border-zinc-850 px-3 flex justify-around items-center text-zinc-400 z-30 select-none">

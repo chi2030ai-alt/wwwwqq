@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, FolderOpen, Database, Search, Plus, Trash2, ArrowLeft, Upload, CheckCircle, HelpCircle, HardDrive, Cpu, Layers
 } from 'lucide-react';
+import { auth } from '../services/firebase';
 
 interface KBFile {
   id: string;
@@ -18,6 +19,7 @@ interface KBFile {
 export default function KnowledgeBaseView({ onBackToLanding }: { onBackToLanding: () => void }) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  
   const [kbFiles, setKbFiles] = useState<KBFile[]>([
     { id: 'f1', name: '2026年服装电商小红书种草推广高点击率词汇黄金配方.docx', category: 'marketing', fileSize: '240 KB', chunksCount: 18, tokensCount: 15400, uploadedAt: '2026-06-02 23:45', embedStatus: 'indexed' },
     { id: 'f2', name: '摩登精品12大核心SKU面料精梳棉高支参数配方.pdf', category: 'product', fileSize: '1.2 MB', chunksCount: 54, tokensCount: 42000, uploadedAt: '2026-06-02 23:30', embedStatus: 'indexed' },
@@ -28,8 +30,45 @@ export default function KnowledgeBaseView({ onBackToLanding }: { onBackToLanding
 
   const [simFileName, setSimFileName] = useState('');
   const [simFileCategory, setSimFileCategory] = useState('marketing');
+  const [simFileContent, setSimFileContent] = useState('');
   const [isUploadingSim, setIsUploadingSim] = useState(false);
   const [simProgress, setSimProgress] = useState(0);
+
+  const userEmail = auth.currentUser?.email;
+  const tenantId = userEmail ? userEmail.replace(/[^a-zA-Z0-9]/g, '_') : 'default_tenant';
+
+  // 1. Fetch real synced KB Chunks from Firestore/Backend
+  const fetchFiles = async () => {
+    try {
+      const res = await fetch(`/api/knowledge?tenantId=${tenantId}`);
+      const data = await res.json();
+      if (data.success && data.chunks && data.chunks.length > 0) {
+        // Map backend kb_chunk object to KBFile UI structure
+        const mapped: KBFile[] = data.chunks.map((item: any) => ({
+          id: item.id,
+          name: item.title,
+          category: item.category,
+          fileSize: `${Math.ceil((item.content?.length || 0) * 1.5 / 1024)} KB`,
+          chunksCount: 1,
+          tokensCount: item.tokenCount || 0,
+          uploadedAt: item.createdAt ? item.createdAt.substring(0, 16).replace('T', ' ') : '刚刚',
+          embedStatus: 'indexed' as const
+        }));
+        
+        // Combine presets with live chunks (ensuring no duplicate IDs)
+        setKbFiles(prev => {
+          const presets = prev.filter(f => f.id.startsWith('f'));
+          return [...mapped, ...presets];
+        });
+      }
+    } catch (err) {
+      console.warn("fetch files error:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchFiles();
+  }, [tenantId]);
 
   const categories = [
     { id: 'all', name: '全部知识库 (All Files)', count: kbFiles.length },
@@ -40,45 +79,65 @@ export default function KnowledgeBaseView({ onBackToLanding }: { onBackToLanding
     { id: 'corporate', name: '企业知识库 (Corporate Ledger)', count: kbFiles.filter(f => f.category === 'corporate').length }
   ];
 
-  const handleSimUpload = (e: React.FormEvent) => {
+  const handleSimUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!simFileName.trim() || isUploadingSim) return;
+    if (!simFileName.trim() || !simFileContent.trim() || isUploadingSim) return;
 
     setIsUploadingSim(true);
-    setSimProgress(10);
+    setSimProgress(20);
 
-    const timer = setInterval(() => {
-      setSimProgress(p => {
-        if (p < 100) {
-          return p + 30;
-        } else {
-          clearInterval(timer);
-          return 100;
-        }
+    const interval = setInterval(() => {
+      setSimProgress(p => p < 80 ? p + 20 : p);
+    }, 250);
+
+    try {
+      // Direct POST to RAG vector ingestion endpoint
+      const response = await fetch('/api/knowledge/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: simFileName,
+          content: simFileContent,
+          category: simFileCategory,
+          tenantId
+        })
       });
-    }, 300);
-
-    setTimeout(() => {
-      const newFile: KBFile = {
-        id: 'f' + (kbFiles.length + 1),
-        name: simFileName.endsWith('.pdf') || simFileName.endsWith('.docx') || simFileName.endsWith('.xlsx') ? simFileName : simFileName + '.txt',
-        category: simFileCategory,
-        fileSize: '320 KB',
-        chunksCount: 15,
-        tokensCount: 12000,
-        uploadedAt: '2026-06-02 23:53',
-        embedStatus: 'indexed'
-      };
-
-      setKbFiles(prev => [newFile, ...prev]);
-      setSimFileName('');
+      const data = await response.json();
+      clearInterval(interval);
+      
+      if (data.success) {
+        setSimProgress(100);
+        setTimeout(() => {
+          fetchFiles();
+          setSimFileName('');
+          setSimFileContent('');
+          setIsUploadingSim(false);
+          setSimProgress(0);
+        }, 300);
+      } else {
+        alert("向量分词载入失败: " + data.error);
+        setIsUploadingSim(false);
+        setSimProgress(0);
+      }
+    } catch (err: any) {
+      clearInterval(interval);
+      alert("连接知识库上传接口错误: " + err.message);
       setIsUploadingSim(false);
       setSimProgress(0);
-    }, 1200);
+    }
   };
 
-  const handleRemoveFile = (id: string) => {
-    setKbFiles(prev => prev.filter(f => f.id !== id));
+  const handleRemoveFile = async (id: string) => {
+    try {
+      if (id.startsWith('chk_')) {
+        await fetch(`/api/knowledge/${id}?tenantId=${tenantId}`, {
+          method: 'DELETE'
+        });
+      }
+      setKbFiles(prev => prev.filter(f => f.id !== id));
+    } catch (err: any) {
+      console.warn("Delete file error:", err.message);
+    }
   };
 
   const filteredFiles = kbFiles.filter(f => {
@@ -188,9 +247,20 @@ export default function KnowledgeBaseView({ onBackToLanding }: { onBackToLanding
                   </select>
                 </div>
 
+                <div className="space-y-1">
+                  <label className="text-[10px] text-neutral-500 font-mono tracking-wider block">核心文档内容 (Text Content)</label>
+                  <textarea
+                    required
+                    value={simFileContent}
+                    onChange={(e) => setSimFileContent(e.target.value)}
+                    placeholder="输入规则内容、宣传文句或配方参数..."
+                    className="w-full bg-black border border-neutral-800 focus:border-[#1D9BF0] rounded-md py-1.5 px-2.5 text-xs text-white focus:outline-none transition-colors min-h-[4.5rem] leading-normal"
+                  />
+                </div>
+
                 <button
                   type="submit"
-                  disabled={!simFileName.trim() || isUploadingSim}
+                  disabled={!simFileName.trim() || !simFileContent.trim() || isUploadingSim}
                   className={`w-full py-2 rounded font-bold text-xs transition-colors border border-transparent flex items-center justify-center space-x-1.5 ${
                     isUploadingSim 
                       ? 'bg-[#1D9BF0]/20 text-[#1D9BF0] cursor-not-allowed'
@@ -198,7 +268,7 @@ export default function KnowledgeBaseView({ onBackToLanding }: { onBackToLanding
                   }`}
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>{isUploadingSim ? '自动分词分向量中...' : '模拟载入知识库'}</span>
+                  <span>{isUploadingSim ? '分词生成向量中...' : '提交载入并生成真实向量'}</span>
                 </button>
               </form>
 

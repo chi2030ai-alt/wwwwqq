@@ -60,24 +60,34 @@ export default function GoogleLoginModal({ userEmail = 'guest@gmail.com', onSucc
       // Force popup mode
       const result = await signInWithPopup(auth, provider);
       
-      if (result.user) {
-        // Save user profile metadata to firestore
-        const userDocRef = doc(db, 'users', result.user.uid);
-        await setDoc(userDocRef, {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName || 'Enterprise Owner',
-          photoURL: result.user.photoURL || '',
-          providerId: 'google.com',
-          createdAt: serverTimestamp(),
-          role: 'founder'
-        }, { merge: true });
+        if (result.user) {
+          // Save user profile metadata to firestore
+          const userDocRef = doc(db, 'users', result.user.uid);
+          await setDoc(userDocRef, {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName || 'Enterprise Owner',
+            photoURL: result.user.photoURL || '',
+            providerId: 'google.com',
+            createdAt: serverTimestamp(),
+            role: 'founder'
+          }, { merge: true });
 
-        // Real Session Login logs written to Firestore
-        await logAuditEntry(result.user.uid, result.user.email || '', 'login_success_google', 'founder');
+          // Real Session Login logs written to Firestore & Express backend
+          await logAuditEntry(result.user.uid, result.user.email || '', 'login_success_google', 'founder');
+          
+          try {
+            await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: result.user.email })
+            });
+          } catch (syncErr) {
+            console.warn("Express backend authentication log bypass:", syncErr);
+          }
 
-        onSuccess(result.user.email || '');
-      }
+          onSuccess(result.user.email || '');
+        }
     } catch (error: any) {
       console.error("Google Authentication error:", error);
       setErrorMsg(error?.message || "Google登录失败，请重试");
@@ -150,6 +160,22 @@ export default function GoogleLoginModal({ userEmail = 'guest@gmail.com', onSucc
             role: 'founder'
           }, { merge: true });
 
+          // Synchronize registration to backend state
+          try {
+            await fetch('/api/auth/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: result.user.email,
+                industryId: localStorage.getItem('onboarding_industry_id') || 'catering',
+                operatingMode: localStorage.getItem('onboarding_operating_mode') || 'full_auto',
+                planId: 'pro'
+              })
+            });
+          } catch (apiErr) {
+            console.warn("Express backend user onboarding setup fail bypass:", apiErr);
+          }
+
           // Send verification email
           try {
             await sendEmailVerification(result.user);
@@ -172,6 +198,16 @@ export default function GoogleLoginModal({ userEmail = 'guest@gmail.com', onSucc
           // Real Session Login logs written to DB
           await logAuditEntry(result.user.uid, result.user.email || '', 'login_success_email', 'founder');
           
+          try {
+            await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: result.user.email })
+            });
+          } catch (syncErr) {
+            console.warn("Express backend authentication log bypass:", syncErr);
+          }
+
           onSuccess(result.user.email || '');
         }
       }
