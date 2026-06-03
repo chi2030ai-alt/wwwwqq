@@ -24,6 +24,10 @@ import {
 import { IndustryData, OperatingStrategy, TeamMember, TaskLog, ChatMessage } from '../types';
 import { MOCK_LOGS_POOL } from '../data';
 import { db, auth, handleFirestoreError, OperationType } from '../services/firebase';
+import DiscountsView from './DiscountsView';
+import ContentView from './ContentView';
+import ChannelsView from './ChannelsView';
+import StorefrontView from './StorefrontView';
 import { 
   collection, 
   doc, 
@@ -358,7 +362,7 @@ export default function MerchantDashboard({
   const [geminiConnected, setGeminiConnected] = useState<'online' | 'local'>('local');
 
   // Sub-navigation state selectors for secondary-level dashboard tabs
-  const [storeSubTab, setStoreSubTab] = useState<'overview' | 'decoration' | 'domain' | 'brand' | 'seo'>('overview');
+  const [storeSubTab, setStoreSubTab] = useState<'overview' | 'decoration' | 'channels' | 'domain' | 'brand' | 'seo'>('overview');
   const [productSubTab, setProductSubTab] = useState<'list' | 'categories' | 'inventory' | 'sku' | 'suppliers' | 'purchase'>('list');
   const [orderSubTab, setOrderSubTab] = useState<'all' | 'draft' | 'refund' | 'aftersales' | 'tracking'>('all');
   const [customerSubTab, setCustomerSubTab] = useState<'list' | 'tags' | 'segments' | 'membership' | 'b2b'>('list');
@@ -2492,6 +2496,7 @@ const handleRestoreFromDrive = async () => {
                   return [
                     { id: 'overview', name: '店铺概览', emoji: '🏢' },
                     { id: 'decoration', name: '店铺装修', emoji: '🎨' },
+                    { id: 'channels', name: '渠道接收', emoji: '🔌' },
                     { id: 'domain', name: '域名设置', emoji: '🌐' },
                     { id: 'brand', name: '品牌设置', emoji: '✨' },
                     { id: 'seo', name: 'SEO设置', emoji: '🔍' }
@@ -2864,6 +2869,27 @@ const handleRestoreFromDrive = async () => {
                   )}
 
                   {storeSubTab === 'decoration' && (
+                    <StorefrontView 
+                      tenantId={tenantId}
+                      industryId={industry.id || 'catering'}
+                      onAddLog={(sender, emoji, msg, type) => setLogs(prev => [
+                        ...prev, 
+                        { id: Math.random().toString(), timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }), sender, emoji, message: msg, type }
+                      ])}
+                    />
+                  )}
+
+                  {storeSubTab === 'channels' && (
+                    <ChannelsView 
+                      tenantId={tenantId}
+                      onAddLog={(sender, emoji, msg, type) => setLogs(prev => [
+                        ...prev, 
+                        { id: Math.random().toString(), timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }), sender, emoji, message: msg, type }
+                      ])}
+                    />
+                  )}
+
+                  {storeSubTab === 'decoration_legacy' && (
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                   {/* Left Controls */}
                   <div className="md:col-span-5 bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4">
@@ -4957,8 +4983,9 @@ const handleRestoreFromDrive = async () => {
                             </div>
                           </div>
                         </div>
+                      </div>
 
-                        <button
+                      <button
                           type="button"
                           onClick={() => {
                             if (!selectedProductSkuUid) {
@@ -4978,155 +5005,125 @@ const handleRestoreFromDrive = async () => {
                             setNewSkuVariantName('');
                             setNewSkuVariantPrice('');
                             setNewSkuVariantStock('');
-                            alert('SKU变体子类注册成功，本变存盘已加入下方 SKU 规格池！');
+                            alert('SKU变体子类注册成功！');
                           }}
-                          className="w-full bg-[#1D9BF0] hover:bg-sky-450 text-white font-extrabold text-[10.5px] py-2 rounded-lg cursor-pointer"
+                          className="w-full bg-[#1D9BF0] hover:bg-sky-450 text-white font-bold text-xs py-2 rounded-lg cursor-pointer animate-pulse"
                         >
-                          创建并追加列 SKU 变体
+                          提交注册此 SKU 变体
                         </button>
                       </div>
-                    </div>
 
-                    {/* Renders list of current variant options for chosen product */}
-                    <div className="md:col-span-12 lg:col-span-7 bg-black/20 border border-[#2F3336] p-4 rounded-xl space-y-4 font-sans">
-                      <span className="text-xs font-bold text-zinc-300 block">📊 关联子条目 SKU 网格列表</span>
-                      {selectedProductSkuUid ? (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-[10px] font-mono text-zinc-450 border-collapse">
-                            <thead>
-                              <tr className="border-b border-[#2F3336] text-zinc-500 whitespace-nowrap">
-                                <th className="pb-2 text-left">SKU属性组合</th>
-                                <th className="pb-2 text-left">单体定价</th>
-                                <th className="pb-2 text-left">独立仓库盘余</th>
-                                <th className="pb-2 text-left">运行权标</th>
-                                <th className="pb-2 text-center">控制</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {skuVariants.map((variant, index) => (
-                                <tr key={index} className="border-b border-[#2F3336]/45 text-zinc-200">
-                                  <td className="py-2.5 font-bold text-white">{variant.name}</td>
-                                  <td className="py-2.5 text-sky-450 font-bold">¥ {variant.price}</td>
-                                  <td className="py-2.5 text-amber-500 font-bold">{variant.stock} 件</td>
-                                  <td className="py-2.5">
-                                    <span className="text-[8.5px] bg-emerald-500/10 text-emerald-450 border border-emerald-500/20 px-1.5 py-0.5 rounded">活跃受控</span>
-                                  </td>
-                                  <td className="py-2.5 text-center px-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSkuVariants(prev => prev.filter((_, i) => i !== index));
-                                      }}
-                                      className="text-red-550 hover:text-red-400 hover:underline cursor-pointer"
-                                    >
-                                      剔除
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="p-8 text-center text-zinc-500 text-xs border border-dashed border-[#2F3336]/50 rounded-xl font-mono">
-                          👈 请在左侧选中某大单品 SPU 档案以调看 SKU 网格矩阵
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Suppliers Management View */}
-              {productSubTab === 'suppliers' && (
-                <div className="bg-[#09090B] border border-[#2F3336] p-6 rounded-xl space-y-6 animate-fadeIn text-left">
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                      <span className="text-sky-400">🤝</span>
-                      <span>核心物料供应链源头供应商资质登记</span>
-                    </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1">管理上游面料/烘焙原豆/精品包材供销商关系树，维护采购单必填要素凭据链条。</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                    {/* New Supplier registry input */}
-                    <div className="md:col-span-12 lg:col-span-4 bg-black/40 border border-[#2F3336] p-4 rounded-xl space-y-3.5 font-sans">
-                      <span className="text-xs font-bold text-zinc-300 block">✙ 登记上游供应商资质</span>
-                      
-                      <div className="space-y-2">
-                        <div className="space-y-0.5">
-                          <label className="text-[9px] text-[#8B949E] font-mono block">厂家/基地全称</label>
-                          <input
-                            type="text"
-                            value={newSupplierName}
-                            onChange={(e) => setNewSupplierName(e.target.value)}
-                            placeholder="如：杭派丝织高定产业园"
-                            className="w-full bg-black border border-neutral-705 rounded p-1.5 text-xs text-white focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="space-y-0.5">
-                          <label className="text-[9px] text-[#8B949E] font-mono block">主要供货种类</label>
-                          <input
-                            type="text"
-                            value={newSupplierCategory}
-                            onChange={(e) => setNewSupplierCategory(e.target.value)}
-                            placeholder="服装外套/熟成咖啡豆"
-                            className="w-full bg-black border border-neutral-705 rounded p-1.5 text-xs text-white focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-0.5">
-                            <label className="text-[9px] text-[#8B949E] font-mono block">对接人</label>
-                            <input
-                              type="text"
-                              value={newSupplierContact}
-                              onChange={(e) => setNewSupplierContact(e.target.value)}
-                              placeholder="张业务经理"
-                              className="w-full bg-black border border-neutral-705 rounded p-1.5 text-xs text-white focus:outline-none"
-                            />
-                          </div>
-                          <div className="space-y-0.5">
-                            <label className="text-[9px] text-[#8B949E] font-mono block font-mono">对接电话</label>
-                            <input
-                              type="text"
-                              value={newSupplierPhone}
-                              onChange={(e) => setNewSupplierPhone(e.target.value)}
-                              placeholder="13900002222"
-                              className="w-full bg-black border border-[#2F3336] rounded p-1.5 text-xs text-white focus:outline-none font-mono"
-                            />
-                          </div>
+                      {/* Right-hand side display list of variants */}
+                      <div className="md:col-span-12 lg:col-span-7 bg-black/20 border border-[#2F3336] p-4 rounded-xl space-y-4">
+                        <span className="text-xs font-bold text-zinc-300 block font-sans">📊 已经注册生成的商品变体矩阵 ({skuVariants.length})</span>
+                        <div className="space-y-2.5 font-sans font-sans">
+                          {skuVariants.map((v, index) => (
+                            <div key={index} className="bg-black border border-[#2F3336] p-3 rounded-lg flex justify-between items-center text-xs text-zinc-300">
+                              <div>
+                                <p className="font-bold text-white font-mono">{v.name}</p>
+                                <p className="text-[10px] text-zinc-500 font-mono mt-0.5">关联 SPU ID：{selectedProductSkuUid || '未知'}</p>
+                              </div>
+                              <div className="text-right font-mono text-zinc-400">
+                                <p>售价: <span className="text-[#38BDF8]">¥ {v.price}</span></p>
+                                <p>库存: <span className="text-white">{v.stock} 件</span></p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!newSupplierName || !newSupplierContact || !newSupplierPhone) {
-                            alert('请完整填写厂家中文全名、主要联系人及联系电话！');
-                            return;
-                          }
-                          const supObj = {
-                            id: 'sup-' + Math.random().toString().slice(2, 6),
-                            name: newSupplierName,
-                            contact: newSupplierContact,
-                            phone: newSupplierPhone,
-                            category: newSupplierCategory || '普货供应',
-                            status: '新签署合作商'
-                          };
-                          setSuppliersList(prev => [...prev, supObj]);
-                          setNewSupplierName('');
-                          setNewSupplierContact('');
-                          setNewSupplierPhone('');
-                          setNewSupplierCategory('');
-                          alert('上游供应商协议准入审核存盘通过，已录入供应链系统！');
-                        }}
-                        className="w-full bg-[#1D9BF0] hover:bg-sky-400 text-white font-bold text-xs py-2 rounded-lg cursor-pointer"
-                      >
-                        签署正式采购物料框架协议
-                      </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Global credit suppliers qualification view */}
+                {productSubTab === 'suppliers' && (
+                  <div className="bg-[#09090B] border border-[#2F3336] p-6 rounded-xl space-y-6 animate-fadeIn text-left">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center space-x-2 font-sans">
+                        <span className="text-sky-455">🤝</span>
+                        <span>上游供应链资质管理与授信准入</span>
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 mt-1">登记公司及店铺的上游合作供货商、物流及质检机构，执行信用履约跟踪，支持货源渠道多轮比选。</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                      {/* Register new supplier layout menu */}
+                      <div className="md:col-span-12 lg:col-span-4 bg-black/40 border border-[#2F3336] p-4 rounded-xl space-y-4">
+                        <span className="text-xs font-bold text-zinc-300 block font-sans">✙ 登记新的上游供应链伙伴</span>
+
+                        <div className="space-y-3 text-xs">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-[#8B949E] font-mono">企业 / 机构伙伴名称</label>
+                            <input
+                              type="text"
+                              value={newSupplierName}
+                              onChange={(e) => setNewSupplierName(e.target.value)}
+                              placeholder="例如: 杭州尚德服装辅料有限公司"
+                              className="w-full bg-black border border-neutral-700 rounded p-1.5 text-xs text-white focus:outline-none"
+                            />
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-[#8B949E] font-mono font-sans">供应物料类目</label>
+                            <input
+                              type="text"
+                              value={newSupplierCategory}
+                              onChange={(e) => setNewSupplierCategory(e.target.value)}
+                              placeholder="例如: 羽绒辅料 / 餐饮冷链"
+                              className="w-full bg-black border border-neutral-700 rounded p-1.5 text-xs text-white focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 font-sans">
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-[#8B949E] font-mono">销售接口负责</label>
+                              <input
+                                type="text"
+                                value={newSupplierContact}
+                                onChange={(e) => setNewSupplierContact(e.target.value)}
+                                placeholder="陈经理"
+                                className="w-full bg-black border border-neutral-700 rounded p-1.5 text-xs text-white focus:outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1 font-sans">
+                              <label className="text-[10px] text-[#8B949E] font-mono">结算电话</label>
+                              <input
+                                type="text"
+                                value={newSupplierPhone}
+                                onChange={(e) => setNewSupplierPhone(e.target.value)}
+                                placeholder="0571-8818****"
+                                className="w-full bg-black border border-neutral-700 rounded p-1.5 text-xs text-white focus:outline-none font-mono"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newSupplierName.trim() || !newSupplierContact || !newSupplierPhone || !newSupplierCategory) {
+                              alert('请输入完整的供应商名称、经营类别、联系人及手机号！');
+                              return;
+                            }
+                            const supObj = {
+                              name: newSupplierName.trim(),
+                              category: newSupplierCategory.trim(),
+                              contact: newSupplierContact.trim(),
+                              phone: newSupplierPhone.trim(),
+                              status: '评级A'
+                            };
+                            setSuppliersList(prev => [...prev, supObj]);
+                            setNewSupplierName('');
+                            setNewSupplierContact('');
+                            setNewSupplierPhone('');
+                            setNewSupplierCategory('');
+                            alert('上游供应商协议准入审核存盘通过，已录入供应链系统！');
+                          }}
+                          className="w-full bg-[#1D9BF0] hover:bg-sky-400 text-white font-bold text-xs py-2 rounded-lg cursor-pointer"
+                        >
+                          签署正式采购物料框架协议
+                        </button>
+                      </div>
 
                     {/* List of current active suppliers */}
                     <div className="md:col-span-12 lg:col-span-8 bg-black/20 border border-[#2F3336] p-4 rounded-xl space-y-3 font-sans">
@@ -5347,17 +5344,18 @@ const handleRestoreFromDrive = async () => {
                           </span>
                         </button>
 
+                        
                         <button
                           type="button"
                           onClick={() => setActiveOrderCategory('dine_in')}
                           className={`flex-1 sm:flex-initial text-center px-4 py-2 rounded-md text-xs font-bold transition-all duration-150 flex items-center justify-center space-x-1.5 cursor-pointer ${
                             activeOrderCategory === 'dine_in'
-                              ? 'bg-amber-600/15 border border-amber-500/30 text-amber-400'
-                              : 'text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent'
+                              ? 'bg-[#1D9BF0] text-white shadow-md'
+                              : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                           }`}
                         >
                           <span>堂食点单</span>
-                          <span className="text-[9px] bg-black/40 px-1.5 py-0.2 rounded font-mono text-amber-500">
+                          <span className="text-[9px] bg-black/40 px-1.5 py-0.2 rounded font-mono text-zinc-300">
                             {ordersList.filter(o => o.type === 'dine_in').length}
                           </span>
                         </button>
@@ -5367,12 +5365,12 @@ const handleRestoreFromDrive = async () => {
                           onClick={() => setActiveOrderCategory('takeout')}
                           className={`flex-1 sm:flex-initial text-center px-4 py-2 rounded-md text-xs font-bold transition-all duration-150 flex items-center justify-center space-x-1.5 cursor-pointer ${
                             activeOrderCategory === 'takeout'
-                              ? 'bg-blue-600/15 border border-blue-500/30 text-blue-300'
-                              : 'text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent'
+                              ? 'bg-[#1D9BF0] text-white shadow-md'
+                              : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                           }`}
                         >
                           <span>外卖点单</span>
-                          <span className="text-[9px] bg-black/40 px-1.5 py-0.2 rounded font-mono text-blue-300">
+                          <span className="text-[9px] bg-black/40 px-1.5 py-0.2 rounded font-mono text-zinc-300">
                             {ordersList.filter(o => o.type === 'takeout').length}
                           </span>
                         </button>
@@ -5384,14 +5382,14 @@ const handleRestoreFromDrive = async () => {
                       <div>
                         <div className="flex items-center space-x-1.5">
                           <Volume2 className="w-3.5 h-3.5 text-sky-500 animate-pulse" />
-                          <h4 className="text-[11px] font-mono uppercase tracking-wider text-sky-400 font-bold">提示机制</h4>
+                          <h4 className="text-[11px] font-mono uppercase tracking-wider text-sky-400 font-bold">提示机制 / 模拟测试</h4>
                         </div>
                         <p className="text-[10px] text-zinc-500 mt-0.5 leading-normal">
-                          模拟测试并发订单。
+                          模拟外卖/堂食的高并发推送与弹窗。
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-2 text-sans">
                         <button
                           type="button"
                           onClick={() => {
