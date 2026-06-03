@@ -144,6 +144,7 @@ export interface DBKBChunk {
   content: string;
   tokenCount: number;
   createdAt: string;
+  vector?: number[];
 }
 
 export interface DBPendingAgentTask {

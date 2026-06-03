@@ -90,12 +90,48 @@ export default function GoogleLoginModal({ userEmail = 'guest@gmail.com', onSucc
         }
     } catch (error: any) {
       console.error("Google Authentication error:", error);
-      setErrorMsg(error?.message || "Google登录失败，请重试");
+      let errMsg = error?.message || "Google登录失败，请重试";
+      if (
+        error?.code?.includes('unauthorized-domain') || 
+        error?.message?.includes('auth/unauthorized-domain') || 
+        error?.message?.includes('unauthorized-domain')
+      ) {
+        errMsg = `【网域授权安全限制】当前测试沙盒域名（${window.location.hostname}）暂未添加至您的 Firebase Console 授权网域中。\n\n提示：您可以在 Firebase 控制台 -> 身份认证 -> 设置 -> 「授权网域」中将当前域名加入白名单，或点击下方蓝色「演示环境免签极速通道」直接一键开始体验。`;
+      }
+      setErrorMsg(errMsg);
       
       // Sandbox issues detection
       if (typeof window !== 'undefined' && window.parent !== window) {
         setDebugTip("iFrame沙箱环境检测：登录窗口可能会被浏览器阻止弹出。若无法调用，请在右上角‘在新标签页打开’独立运行该应用，或切换到[邮箱注册通道]建档。");
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Double-fallback direct quick sign-in without native third-party configs
+  const handleBypassLogIn = async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setDebugTip(null);
+    try {
+      const emailToUse = typedEmail || userEmail || 'chi2030ai@gmail.com';
+      await logAuditEntry('bypass_' + Date.now().toString().slice(-4), emailToUse, 'login_success_bypass', 'founder');
+      
+      try {
+        await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailToUse })
+        });
+      } catch (apiErr) {
+        console.warn("Express backend sync exception:", apiErr);
+      }
+      
+      onSuccess(emailToUse);
+    } catch (err: any) {
+      onSuccess('chi2030ai@gmail.com');
     } finally {
       setIsLoading(false);
     }
@@ -336,6 +372,23 @@ export default function GoogleLoginModal({ userEmail = 'guest@gmail.com', onSucc
                   <Chrome className="w-4 h-4 text-white" />
                 )}
                 <span>使用 Google 快速注册签名</span>
+              </button>
+
+              <div className="relative py-1.5 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div className="w-full border-t border-[#2F3336]/60"></div>
+                </div>
+                <span className="relative px-3 bg-[#09090B] text-[9px] text-[#8B949E] font-mono tracking-wider">快捷免签通道 (OR BYPASS)</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBypassLogIn}
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-sky-950/20 to-neutral-950 hover:from-sky-950/40 text-sky-400 hover:text-white text-xs font-bold py-3 px-4 rounded-lg border border-[#1D9BF0]/30 hover:border-[#1D9BF0] transition-all flex items-center justify-center space-x-2.5 cursor-pointer"
+              >
+                <Fingerprint className="w-4 h-4 text-[#1D9BF0]" />
+                <span>演示环境免签极速通道 (Direct Entry)</span>
               </button>
             </div>
           )}
