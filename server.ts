@@ -12,6 +12,7 @@ import { ModaDB } from "./src/server/db";
 import { generateWithOpenAI } from "./src/services/openai.service";
 import { createLangChainAgent } from "./src/services/langchain.service";
 import { generateWithOllama } from "./src/services/ollama.service";
+import agentRouter from "./src/api/agent.js";
 
 // Initialize Firebase client for server backup & live cloud persistence syncing
 import { initializeApp } from "firebase/app";
@@ -1534,119 +1535,7 @@ async function startServer() {
   });
 
   // === 11. AGENT RUNTIME DISPATCH ENGINE & TASK SCHEDULERS (REAL FIRESTORE & DUAL SYNCED QUEUE) ===
-  app.post("/api/agents/execute", async (req, res) => {
-    try {
-      const { agentId, teamId, inputMessage, rolePrompt, tenantId } = req.body;
-      if (!agentId || !inputMessage) {
-        res.status(400).json({ success: false, error: "Missing agentId or input message content." });
-        return;
-      }
-      const activeTenant = tenantId || "default_tenant";
-      const db = ModaDB.read();
-      const taskId = `task_${Math.random().toString(36).slice(2, 11)}`;
-      
-      const newPendingTask = {
-        id: taskId,
-        teamId: teamId || "universal_team",
-        agentId,
-        inputMessage,
-        status: "processing" as const,
-        createdAt: new Date().toISOString()
-      };
-      
-      db.agent_tasks.push(newPendingTask);
-      ModaDB.write(db);
-
-      // Write transaction to Firestore live tasks queue namespace
-      if (serverDb) {
-        try {
-          const taskRef = firestoreDoc(serverDb, "tenants", activeTenant, "agent_tasks", taskId);
-          await firestoreSetDoc(taskRef, newPendingTask);
-        } catch (taskErr: any) {
-          console.warn("Firestore task enqueue log warning:", taskErr.message);
-        }
-      }
-
-      // Perform Gemini reasoning processing or offline simulation dynamically
-      try {
-        const client = getGeminiClient();
-        
-        // Retrieve context using RAG
-        const retrievedRAG = await retrieveRAGContext(inputMessage, activeTenant);
-        const enhancedSystemInstruction = retrievedRAG
-          ? `${rolePrompt || "你是一个摩整数字员工智能工作站"}\n\n=== RAG 商业规则与规章参考 (Real Retrieve) ===\n${retrievedRAG}`
-          : (rolePrompt || "你是一个摩整数字员工智能工作站");
-
-        const response = await client.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: inputMessage,
-          config: {
-            systemInstruction: enhancedSystemInstruction,
-            temperature: 0.8
-          }
-        });
-
-        const reply = response.text || "已完成相应的数字流程分析并自动交付中继。";
-        
-        // Update task status inside local DB
-        const freshDB = ModaDB.read();
-        const activeTask = freshDB.agent_tasks.find(t => t.id === taskId);
-        if (activeTask) {
-          activeTask.status = "completed";
-          activeTask.response = reply;
-          activeTask.completedAt = new Date().toISOString();
-        }
-        ModaDB.write(freshDB);
-
-        // Update task status inside Firestore
-        if (serverDb) {
-          try {
-            const taskRef = firestoreDoc(serverDb, "tenants", activeTenant, "agent_tasks", taskId);
-            await firestoreSetDoc(taskRef, {
-              ...newPendingTask,
-              status: "completed",
-              response: reply,
-              completedAt: new Date().toISOString()
-            });
-          } catch (taskErr: any) {
-            console.warn("Firestore task fulfillment sync exception:", taskErr.message);
-          }
-        }
-
-        res.json({ success: true, taskId, status: "completed", response: reply });
-      } catch (geminiError: any) {
-        console.warn("Gemini Engine runtime call fallback (applying simulated logic):", geminiError.message);
-        
-        const responseFallback = `[智体自主代运营中继]：已接受数据 "${inputMessage}"。已根据目前商家最合适的价格，进行一键补货，同步完成顺丰寄发。`;
-        const freshDB = ModaDB.read();
-        const activeTask = freshDB.agent_tasks.find(t => t.id === taskId);
-        if (activeTask) {
-          activeTask.status = "completed";
-          activeTask.response = responseFallback;
-          activeTask.completedAt = new Date().toISOString();
-        }
-        ModaDB.write(freshDB);
-
-        if (serverDb) {
-          try {
-            const taskRef = firestoreDoc(serverDb, "tenants", activeTenant, "agent_tasks", taskId);
-            await firestoreSetDoc(taskRef, {
-              ...newPendingTask,
-              status: "completed",
-              response: responseFallback,
-              completedAt: new Date().toISOString()
-            });
-          } catch (taskErr: any) {
-            console.warn("Firestore task simulation callback exception:", taskErr.message);
-          }
-        }
-
-        res.json({ success: true, taskId, status: "completed", response: responseFallback, warning: geminiError.message });
-      }
-    } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
+  app.use(agentRouter);
 
   // API 2: Interactive AI Employee response dispatcher (With Full Real RAG Retrieval and Cloud Logs)
   app.post("/api/chat", async (req, res) => {

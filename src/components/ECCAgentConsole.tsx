@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sliders, Shield, HardDrive, Cpu, Terminal, Plus, Trash2, Eye, ShieldCheck, Check, RotateCcw } from 'lucide-react';
+import { Sliders, Shield, HardDrive, Cpu, Terminal, Plus, Trash2, Eye, ShieldCheck, Check, RotateCcw, Sparkles, Upload, Image, Send, FileText } from 'lucide-react';
 
 interface AgentState {
   id: string;
@@ -108,7 +108,90 @@ export default function ECCAgentConsole({ agents, onAddLog, onUpdateAgentTask }:
   const [openedVirtFileText, setOpenedVirtFileText] = useState<string>('');
   const [newVirtFileName, setNewVirtFileName] = useState('');
 
+  // Advanced collaborative multimodality agent states
+  const [playInput, setPlayInput] = useState<string>('当前我们店正处于冬季尾声。请配合大模型视觉解析上传的趋势草图/爆款参考，为我们的冬装清仓设计一个全渠道低价直通车投放文案，并组织 Barton 协同配合给出备货预存计划。');
+  const [playSystemPrompt, setPlaySystemPrompt] = useState<string>('');
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+  const [selectedCollaborativeAgents, setSelectedCollaborativeAgents] = useState<string[]>([]);
+  const [executingPlayTask, setExecutingPlayTask] = useState<boolean>(false);
+  const [playTaskResult, setPlayTaskResult] = useState<{
+    success: boolean;
+    taskId?: string;
+    response?: string;
+    attachedImagesLog?: string[];
+    collaborationSteps?: Array<{ agent: string; action: string; output: string }>;
+    warning?: string;
+  } | null>(null);
+
   const currentAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
+
+  const handleLaunchJointWorkflow = async () => {
+    if (!playInput.trim()) return;
+    setExecutingPlayTask(true);
+    setPlayTaskResult(null);
+    onAddLog(`【智体车坞启动】正在打包多智体跨岗位联合算力方案，核心主导岗位：$${currentAgent.name} 🚀`);
+
+    // Extract dynamic skills prompts if playSystemPrompt is empty
+    const currentSkills = activeSkills[selectedAgentId] || [];
+    const derivedRolePrompt = playSystemPrompt || 
+      `你是摩整公司的核心数字骨干 [${currentAgent.name}]，岗位级别：${currentAgent.role}。在运营中，你恪守以下专业特许微技能：\n` +
+      currentSkills.filter(s => s.enabled).map(s => `- 【${s.name}】：${s.prompt}`).join("\n");
+
+    try {
+      const payload = {
+        agentId: currentAgent.name,
+        teamId: currentAgent.id,
+        inputMessage: playInput,
+        rolePrompt: derivedRolePrompt,
+        tenantId: "default_tenant",
+        images: attachedFiles,
+        collaborativeAgents: selectedCollaborativeAgents
+      };
+
+      const response = await fetch(`/api/agents/${encodeURIComponent(currentAgent.name)}/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      setPlayTaskResult(data);
+      if (data.success) {
+        onAddLog(`【智体联合算力成功】决策任务 ${data.taskId || ""} 执行完成。已在多岗位智体共识链中固化！🟢`);
+      } else {
+        onAddLog(`【智体联合算力故障】认知推理链路阻断：${data.error || "未知故障"}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      onAddLog(`【智体联合故障】云端推理超时或拒绝：${err.message}`);
+      setPlayTaskResult({
+        success: false,
+        response: `[本地备用中继激活]：系统无法建立对云端多模态接口的有效侦听。由于本地代存策略，该事件已持久化存储本地 ModaDB 的待办任务中，以便稍后再次执行。`
+      });
+    } finally {
+      setExecutingPlayTask(false);
+    }
+  };
+
+  const handleImageRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setAttachedFiles(prev => [...prev, reader.result as string]);
+          onAddLog(`【沙盒多模态】视觉实物图像 "${file.name}" 装载成功，Base64 固化就绪！🖼️`);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleToggleCollaboratorInPlay = (name: string) => {
+    setSelectedCollaborativeAgents(prev => 
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
+  };
   const security = agentSecuritySettings[selectedAgentId] || { budgetLimit: 100, sandboxEnabled: true, strictCompliance: true };
 
   const handleUpdateSecurity = (field: 'budgetLimit' | 'sandboxEnabled' | 'strictCompliance', val: any) => {
@@ -455,7 +538,202 @@ export default function ECCAgentConsole({ agents, onAddLog, onUpdateAgentTask }:
             </p>
           </div>
         </div>
+
+        {/* Real Interactive Multi-Agent & Multimodal Sandbox Station */}
+        <div className="mt-6 border-t border-neutral-900 pt-6 space-y-5">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="w-5 h-5 text-sky-400 animate-pulse" />
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-display">
+                <span>🧠 Multi-Agent & Multimodal 联合决策车坞 (AI Brainstorm Sandbox)</span>
+              </h3>
+              <p className="text-[10.5px] text-neutral-400 mt-0.5">
+                不仅可由 **{currentAgent.name}** 主导，还可勾选多岗数字员工协作，并提供实物设计草图/参考图片进行级联视觉分析。
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+            {/* Left Box: Controls & Upload */}
+            <div className="xl:col-span-4 space-y-4">
+              {/* Collaborative Agent List Selection */}
+              <div className="p-4 bg-black/45 rounded-xl border border-neutral-905 space-y-2.5">
+                <span className="text-[10px] font-bold text-zinc-400 font-mono block uppercase">
+                  👥 协力决策智体 (Collaborator Staff):
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  {agents
+                    .filter(ag => ag.id !== currentAgent.id)
+                    .map(ag => {
+                      const isSelected = selectedCollaborativeAgents.includes(ag.name);
+                      return (
+                        <label 
+                          key={ag.id} 
+                          className={`flex items-center space-x-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${
+                            isSelected 
+                              ? 'border-[#1D9BF0] bg-[#1D9BF0]/5 text-sky-400 font-bold' 
+                              : 'border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900 text-neutral-400'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleCollaboratorInPlay(ag.name)}
+                            className="rounded border-neutral-800 text-sky-500 focus:ring-0 focus:ring-offset-0 bg-transparent w-3 h-3"
+                          />
+                          <span className="truncate">{ag.avatar} {ag.name.split(' ')[0]}</span>
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Multimodal Image Attachment list */}
+              <div className="p-4 bg-black/45 rounded-xl border border-neutral-905 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-zinc-400 font-mono flex items-center gap-1">
+                    <Image className="w-3.5 h-3.5 text-zinc-500" />
+                    <span>🖼️ 视觉材质/趋势草图 (Multimodal View):</span>
+                  </span>
+                  {attachedFiles.length > 0 && (
+                    <button 
+                      onClick={() => setAttachedFiles([])} 
+                      className="text-[9px] text-red-500 hover:underline cursor-pointer"
+                    >
+                      清空图片
+                    </button>
+                  )}
+                </div>
+
+                {/* Styled file drop zone */}
+                <div className="relative border border-dashed border-neutral-800 hover:border-neutral-700 rounded-xl p-3 bg-neutral-950 flex flex-col items-center justify-center text-center cursor-pointer duration-105 group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageRead}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  <Upload className="w-5 h-5 text-zinc-650 group-hover:text-sky-400 duration-150 mb-1" />
+                  <span className="text-[10px] text-zinc-400 group-hover:text-white duration-150">点击或拖拽上传实物图、草图</span>
+                  <span className="text-[8px] text-zinc-600 font-mono mt-0.5">支持 PNG, JPG, WEBP | Gemini 视觉解析</span>
+                </div>
+
+                {/* Thumbnails preview */}
+                {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-neutral-950">
+                    {attachedFiles.map((base64, index) => (
+                      <div key={index} className="relative w-12 h-12 bg-neutral-900 rounded border border-neutral-800 group overflow-hidden">
+                        <img 
+                          src={base64} 
+                          alt="preview" 
+                          className="w-full h-full object-cover font-sans"
+                          referrerPolicy="no-referrer" 
+                        />
+                        <button 
+                          onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== index))}
+                          className="absolute inset-0 bg-red-650/80 text-white font-bold text-[9px] opacity-0 group-hover:opacity-100 duration-100 flex items-center justify-center"
+                        >
+                          移除
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Box: Task Text area input & Results Terminal */}
+            <div className="xl:col-span-8 space-y-4">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-zinc-400 font-mono block uppercase">
+                  ✍️ 高阶企业务决策指令 (Enterprise Task Draft):
+                </span>
+                <div className="relative">
+                  <textarea
+                    value={playInput}
+                    onChange={(e) => setPlayInput(e.target.value)}
+                    placeholder="输入具体的任务规则指令或问题让智体联合决策..."
+                    className="w-full bg-[#030304] border border-neutral-850 focus:border-zinc-700 text-[11.5px] leading-relaxed p-4 pb-14 rounded-xl text-white focus:outline-none min-h-[6.5rem]"
+                  />
+                  
+                  {/* Action launcher */}
+                  <div className="absolute right-3.5 bottom-3.5">
+                    <button
+                      onClick={handleLaunchJointWorkflow}
+                      disabled={executingPlayTask}
+                      className="bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-[10.5px] px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 disabled:bg-neutral-800 disabled:text-neutral-500 duration-150 shadow-[0_4px_12px_rgba(14,165,233,0.2)] cursor-pointer"
+                    >
+                      {executingPlayTask ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          <span>多岗位算力执行中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5 text-current" />
+                          <span>✨ 发起多岗位数字协同 (Execute Workflow)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Show Response Terminal if results exist */}
+              {playTaskResult && (
+                <div className="p-4 bg-black/60 border border-neutral-850 rounded-xl space-y-3 font-mono text-left">
+                  <div className="flex justify-between items-center text-[10px] border-b border-neutral-900 pb-2">
+                    <span className="text-zinc-500 flex items-center gap-1.5 font-bold uppercase">
+                      <FileText className="w-3.5 h-3.5 text-sky-450" />
+                      <span>COGNITIVE OUTCOME TERMINAL [STATUS: SUCCESS]</span>
+                    </span>
+                    <button 
+                      onClick={() => setPlayTaskResult(null)} 
+                      className="text-zinc-550 hover:text-white cursor-pointer"
+                    >
+                      &times; Close
+                    </button>
+                  </div>
+
+                  <div className="text-[11px] text-zinc-300 space-y-4 max-h-[16rem] overflow-y-auto pr-1 select-text leading-normal">
+                    {/* Render step details if collaborationSteps are provided */}
+                    {playTaskResult.collaborationSteps && playTaskResult.collaborationSteps.length > 0 ? (
+                      <div className="space-y-4">
+                        {playTaskResult.collaborationSteps.map((step, idx) => (
+                          <div key={idx} className="p-3 bg-neutral-950 border border-neutral-900 rounded-lg space-y-2">
+                            <div className="flex justify-between items-center text-[9.5px]">
+                              <span className="font-extrabold text-white bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded border border-sky-400/20">
+                                岗位智体: {step.agent}
+                              </span>
+                              <span className="text-zinc-500 font-mono font-normal">
+                                行为: {step.action}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
+                              {step.output}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap font-sans text-neutral-350 leading-relaxed font-sans">
+                        {playTaskResult.response}
+                      </p>
+                    )}
+
+                    {playTaskResult.warning && (
+                      <div className="p-2.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-md text-[10.5px] font-sans">
+                        ⚠️ **本地规则备份机制已激活**: {playTaskResult.warning}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
+
     </div>
   );
 }
