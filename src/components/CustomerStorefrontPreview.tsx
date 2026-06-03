@@ -3,7 +3,7 @@ import {
   ShoppingBag, ShoppingCart, ArrowLeft, Check, Sparkles, Smartphone, 
   Monitor, ChevronRight, Star, Clock, MapPin, Phone, Heart, Flame, Send, Search, MessageSquare
 } from 'lucide-react';
-import { db } from '../services/firebase';
+import { db, FirestoreTenantService } from '../services/firebase';
 import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { INDUSTRY_PRESETS } from '../data';
 
@@ -306,39 +306,39 @@ export default function CustomerStorefrontPreview() {
       console.warn("Real-time preview tenant sync failed (falling back): ", error);
     });
 
-    // Dynamic subscription to the multi-tenant Firestore path for real-time customer menu updates!
-    const productColRef = collection(db, 'tenants', localTenantId, 'industries', localIndustryId, 'products');
-    const unsubscribe = onSnapshot(productColRef, (colSnap) => {
-      if (!colSnap.empty) {
-        const list: Product[] = [];
-        colSnap.forEach((docSnap) => {
-          list.push({ ...docSnap.data() } as Product);
-        });
-        setProducts(list);
-      } else if (localProducts) {
-        try {
-          setProducts(JSON.parse(localProducts));
-        } catch (e) {
-          console.error(e);
+    // Dynamic subscription to the physically isolated multi-tenant Firestore path /industries/{industryId}/shops/{shopId}/products
+    const unsubscribe = FirestoreTenantService.subscribeCollection(
+      localIndustryId,
+      localTenantId,
+      'products',
+      (list) => {
+        if (list.length > 0) {
+          setProducts(list as Product[]);
+        } else if (localProducts) {
+          try {
+            setProducts(JSON.parse(localProducts));
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          const indDefaults = getIndustryDefaults(localIndustryId);
+          setProducts(indDefaults.products);
         }
-      } else {
-        // Fallback default mock products matching selected industry instead of catering hardcode!
-        const indDefaults = getIndustryDefaults(localIndustryId);
-        setProducts(indDefaults.products);
-      }
-    }, (error) => {
-      console.warn("Real-time preview product load fallback: ", error);
-      if (localProducts) {
-        try {
-          setProducts(JSON.parse(localProducts));
-        } catch (e) {
-          console.error(e);
+      },
+      (error) => {
+        console.warn("Physically isolated path product load failed, trying fallback: ", error);
+        if (localProducts) {
+          try {
+            setProducts(JSON.parse(localProducts));
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          const indDefaults = getIndustryDefaults(localIndustryId);
+          setProducts(indDefaults.products);
         }
-      } else {
-        const indDefaults = getIndustryDefaults(localIndustryId);
-        setProducts(indDefaults.products);
       }
-    });
+    );
 
     return () => {
       unsubscribe();
@@ -1155,11 +1155,10 @@ export default function CustomerStorefrontPreview() {
                               phone: '13910245678',
                               tracking: '顺丰自动配货中'
                             };
-                            const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
-                            await setDoc(orderDocRef, orderToSave);
+                            await FirestoreTenantService.saveDocument(localIndustryId, localTenantId, 'orders', newOrderId, orderToSave);
+
                             const billingLogId = `SAAS-BILL-${Date.now()}`;
-                            const billingLogRef = doc(db, 'tenants', localTenantId, 'billing_logs', billingLogId);
-                            await setDoc(billingLogRef, {
+                            const billingLogData = {
                               id: billingLogId,
                               orderId: newOrderId,
                               amount: total,
@@ -1170,7 +1169,9 @@ export default function CustomerStorefrontPreview() {
                               status: 'settled',
                               tokenConsumed: Math.floor(total * 8 + 15),
                               description: `完成店面消费订单付款扣减，商品: ${desc}`
-                            });
+                            };
+                            await FirestoreTenantService.saveDocument(localIndustryId, localTenantId, 'billing_logs', billingLogId, billingLogData);
+
                             showToast('🎉 Stripe 安全结算收银成功！您的代运营团队已极速跟进派单出货！', 'success');
                             setOrderSubmitted(true);
                             setCustomerCart([]);
@@ -1190,11 +1191,10 @@ export default function CustomerStorefrontPreview() {
                               phone: '13910245678',
                               tracking: '顺丰自动配货中'
                             };
-                            const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
-                            await setDoc(orderDocRef, orderToSave);
+                            await FirestoreTenantService.saveDocument(localIndustryId, localTenantId, 'orders', newOrderId, orderToSave);
+
                             const billingLogId = `SAAS-BILL-${Date.now()}`;
-                            const billingLogRef = doc(db, 'tenants', localTenantId, 'billing_logs', billingLogId);
-                            await setDoc(billingLogRef, {
+                            const billingLogData = {
                               id: billingLogId,
                               orderId: newOrderId,
                               amount: total,
@@ -1205,7 +1205,9 @@ export default function CustomerStorefrontPreview() {
                               status: 'settled',
                               tokenConsumed: Math.floor(total * 8 + 15),
                               description: `完成店面消费订单付款扣减，商品: ${desc}`
-                            });
+                            };
+                            await FirestoreTenantService.saveDocument(localIndustryId, localTenantId, 'billing_logs', billingLogId, billingLogData);
+
                             showToast('✅ Alipay 支付已确认，系统已完成订单发起。', 'success');
                             setOrderSubmitted(true);
                             setCustomerCart([]);
@@ -1249,8 +1251,7 @@ export default function CustomerStorefrontPreview() {
                                 phone: '13910245678',
                                 tracking: '等待微信支付完成'
                               };
-                              const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
-                              await setDoc(orderDocRef, orderToSave);
+                              await FirestoreTenantService.saveDocument(localIndustryId, localTenantId, 'orders', newOrderId, orderToSave);
                               showToast('✅ 已生成微信支付二维码，请扫码完成支付。', 'success');
                             } else {
                               throw new Error(data.error || '微信支付二维码生成失败');
@@ -1297,8 +1298,7 @@ export default function CustomerStorefrontPreview() {
                                 phone: '13910245678',
                                 tracking: '等待 PayPal 支付完成'
                               };
-                              const orderDocRef = doc(db, 'tenants', localTenantId, 'industries', localIndustryId, 'orders', newOrderId);
-                              await setDoc(orderDocRef, orderToSave);
+                              await FirestoreTenantService.saveDocument(localIndustryId, localTenantId, 'orders', newOrderId, orderToSave);
                               if (data.approvalLink) {
                                 window.open(data.approvalLink, '_blank');
                               }

@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { 
   Users, User, Briefcase, Zap, Star, ShieldCheck, Mail, ArrowLeft, Layers, MessageSquare, BookOpen, Activity
 } from 'lucide-react';
+import { rbacService, UserRole } from '../services/rbac';
 
 interface AIEmployee {
   role: string;
@@ -24,7 +25,12 @@ interface IndustryTeam {
   roster: AIEmployee[];
 }
 
-export default function AITeamsView({ onBackToLanding }: { onBackToLanding: () => void }) {
+interface AITeamsViewProps {
+  onBackToLanding: () => void;
+  userRole?: string;
+}
+
+export default function AITeamsView({ onBackToLanding, userRole }: AITeamsViewProps) {
   const lockedIndustryId = typeof window !== 'undefined' ? localStorage.getItem('preview_industry_id') : null;
   const [selectedIndustry, setSelectedIndustry] = useState<string>(lockedIndustryId || 'fashion');
 
@@ -171,7 +177,16 @@ export default function AITeamsView({ onBackToLanding }: { onBackToLanding: () =
         {/* Industry switcher */}
         <div className="flex flex-wrap gap-2.5 items-center">
           {industryTeams.map((team) => {
-            const isSelectable = !lockedIndustryId || lockedIndustryId === team.id;
+            // Map raw userRole to robust system UserRole
+            const robustRole: UserRole = 
+              userRole === 'admin' ? 'Platform Admin' :
+              userRole === 'founder' ? 'Merchant Owner' :
+              userRole === 'manager' ? 'Manager' :
+              userRole === 'staff' ? 'Staff' : 'Customer';
+
+            const isAuthorized = rbacService.canAccessAITeam(robustRole, lockedIndustryId, team.id);
+            const isSelectable = isAuthorized;
+
             return (
               <button
                 key={team.id}
@@ -179,15 +194,15 @@ export default function AITeamsView({ onBackToLanding }: { onBackToLanding: () =
                 onClick={() => isSelectable && setSelectedIndustry(team.id)}
                 className={`px-4 py-2.5 rounded-lg border text-xs font-bold transition-all duration-150 flex items-center space-x-2 ${
                   selectedIndustry === team.id
-                    ? 'border-[#1D9BF0] bg-[#1D9BF0]/10 text-white'
+                    ? 'border-[#1D9BF0] bg-[#1D9BF0]/10 text-white font-mono'
                     : !isSelectable
                       ? 'border-neutral-900 bg-neutral-950/60 opacity-40 cursor-not-allowed text-neutral-600'
-                      : 'border-neutral-800 bg-neutral-950 hover:border-neutral-500 text-neutral-400 hover:text-white cursor-pointer'
+                      : 'border-neutral-800 bg-neutral-950 hover:border-neutral-500 text-neutral-400 hover:text-white cursor-pointer font-mono'
                 }`}
               >
                 <span>{team.emoji}</span>
                 <span>{team.name}</span>
-                {!isSelectable && <span className="text-[10px] text-neutral-500">🔒</span>}
+                {!isSelectable && <span className="text-[10px] text-neutral-500" title="RBAC 行业权限隔离锁定">🔒 RBAC</span>}
               </button>
             );
           })}

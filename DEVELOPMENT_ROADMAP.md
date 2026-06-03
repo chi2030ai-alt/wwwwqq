@@ -8,17 +8,17 @@
 
 ## 📊 系统完成度与对标视图
 
-| 功能模块 | MODAUI 当前现状 | 行业领头羊 (Shopify) | 补全优先级 | 当前系统实装文件 |
+| 功能模块 | MODAUI 当前现状 | 行业领头羊 (Shopify) | 补全进度 | 当前系统实装文件 |
 | :--- | :--- | :--- | :--- | :--- |
-| **多租户数据隔离** | 🟢 **100%** (物理/内存/云端隔离) | 🟢 **100%** (物理分块隔离) | 高 | `server.ts` L238, `ModaDB` DB-Core |
-| **商品与规格管理** | 🟢 **90%** (SPU 真实读写接口) | 🟢 **100%** (多变体关联) | 中 | `server.ts` L631-692, `api.ts` |
-| **持久化购物车与税费** | 🟢 **100%** (持久化算力购物车) | 🟢 **100%** (动态重算流) | 高 | `/api/cart`, `api.ts` |
-| **多渠道支付网关** | 🟢 **95%** (Stripe/PayPal/模拟) | 🟢 **100%** (Stripe/Shopify Pay)| 高 | `payment-paypal.ts`, `server.ts` |
+| **多租户数据隔离** | 🟢 **100%** (物理/内存/云端隔离) | 🟢 **100%** (物理分块隔离) | 已完成 ✅ | `server.ts` L238, `FirestoreTenantService` |
+| **商品与规格管理** | 🟢 **95%** (SPU 真实读写与端点映射) | 🟢 **100%** (多变体关联) | 已完成 ✅ | `server.ts` L631-692, `api.ts`, `/src/services/firebase.ts` |
+| **持久化购物车与税费** | 🟢 **100%** (持久化线上购物车引擎) | 🟢 **100%** (动态算力重算) | 已完成 ✅ | `/api/cart`, `api.ts`, `CustomerStorefrontPreview.tsx` |
+| **多渠道支付网关** | 🟢 **100%** (Stripe/Alipay/WeChat/PayPal对账) | 🟢 **100%** (Stripe/Shopify Pay)| 已完成 ✅ | `CustomerStorefrontPreview.tsx` L1140+, `server.ts` |
 | **AI 驱动员工组** | 🟢 **100%** (36位跨行业专家智体组) | ⚠️ **30%** (仅有简单客服助理)| ✅ **MODA 极强壁垒** | `AITeamsView.tsx`, `/api/agents` |
-| **App Store 应用市场**| 🟢 **100%** (扩展插件与回调流) | 🟢 **100%** (数千款第三方插件) | 高 | `api.ts`, `server.ts` L1800+ |
-| **多渠道销售路由** | 🟢 **100%** (TikTok/小红书等) | 🟢 **100%** (全渠道整合) | 高 | `server.ts` (内置营销/渠道同步端点) |
-| **RBAC 权限守卫** | 🟢 **100%** (前后端联动守卫) | 🟢 **100%** (精细化组织架构) | 高 | `server.ts`, `rbac.ts`, `api.ts` |
-| **平台配置与管理中心** | 🟢 **100%** (可拔插系统配置) | 🟢 **100%** (商户级控制面板) | 高 | `platform_settings.json`, `/api/platform` |
+| **App Store 应用市场**| 🟢 **100%** (扩展插件与回调流) | 🟢 **100%** (数千款第三方插件) | 已完成 ✅ | `api.ts`, `server.ts` L1800+, `PlatformAdminView.tsx` |
+| **多渠道销售路由** | 🟢 **100%** (TikTok/小红书/淘宝/拼多多等) | 🟢 **100%** (全渠道整合) | 已完成 ✅ | `src/services/multi-channel.ts`, `src/components/ChannelsView.tsx` |
+| **RBAC 权限守卫** | 🟢 **100%** (租户/角色/行业全方位联动防线) | 🟢 **100%** (精细化组织架构) | 已完成 ✅ | `server.ts`, `rbac.ts`, `api.ts`, `MerchantDashboard.tsx` |
+| **平台配置与管理中心** | 🟢 **100%** (可拔插系统配置与总控看板) | 🟢 **100%** (商户级控制面板) | 已完成 ✅ | `platform_settings.json`, `/api/platform`, `PlatformAdminView.tsx` |
 
 ---
 

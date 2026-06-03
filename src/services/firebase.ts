@@ -124,3 +124,130 @@ export function tryInitializeFirebase(): { success: boolean; error?: string } {
     };
   }
 }
+
+// ============================================
+// Multi-Tenant Isolation Firestore Service Layer
+// ============================================
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDocs, 
+  deleteDoc,
+  DocumentData,
+  onSnapshot
+} from 'firebase/firestore';
+
+export const FirestoreTenantService = {
+  /**
+   * Generates the multi-tenant physical isolated path
+   * path template: /industries/{industryId}/shops/{shopId}/{collectionName}
+   */
+  getIsolatedPath(industryId: string, shopId: string, collectionName: string): string {
+    const cleanInd = (industryId || 'fashion').toLowerCase();
+    const cleanShop = (shopId || 'universal_store').toLowerCase();
+    return `industries/${cleanInd}/shops/${cleanShop}/${collectionName}`;
+  },
+
+  /**
+   * Returns a reference to the isolated collection
+   */
+  getCollectionRef(industryId: string, shopId: string, collectionName: string) {
+    const firestoreDb = getFirebaseDb();
+    if (!firestoreDb) throw new Error('Firebase firestore database is not initialized');
+    const pathValue = this.getIsolatedPath(industryId, shopId, collectionName);
+    return collection(firestoreDb, pathValue);
+  },
+
+  /**
+   * Returns a reference to a specific document inside the isolated path
+   */
+  getDocRef(industryId: string, shopId: string, collectionName: string, docId: string) {
+    const firestoreDb = getFirebaseDb();
+    if (!firestoreDb) throw new Error('Firebase firestore database is not initialized');
+    const pathValue = this.getIsolatedPath(industryId, shopId, collectionName);
+    return doc(firestoreDb, pathValue, docId);
+  },
+
+  /**
+   * Reads documents from an isolated collection, automatically verifying and filtering by shopId.
+   */
+  async getDocuments(industryId: string, shopId: string, collectionName: string): Promise<any[]> {
+    try {
+      const colRef = this.getCollectionRef(industryId, shopId, collectionName);
+      const snapshot = await getDocs(colRef);
+      const data: any[] = [];
+      snapshot.forEach(doc => {
+        data.push({ id: doc.id, ...(doc.data() as Record<string, any>), shopId });
+      });
+      return data;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, this.getIsolatedPath(industryId, shopId, collectionName));
+      return [];
+    }
+  },
+
+  /**
+   * Saves a document to the isolated path with automatic tenant metadata binding
+   */
+  async saveDocument(industryId: string, shopId: string, collectionName: string, docId: string, data: any): Promise<any> {
+    try {
+      const docRef = this.getDocRef(industryId, shopId, collectionName, docId);
+      const payload = {
+        ...data,
+        id: docId,
+        shopId,
+        industryId,
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(docRef, payload, { merge: true });
+      return payload;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `${this.getIsolatedPath(industryId, shopId, collectionName)}/${docId}`);
+      return null;
+    }
+  },
+
+  /**
+   * Deletes a document from the isolated path
+   */
+  async deleteDocument(industryId: string, shopId: string, collectionName: string, docId: string): Promise<boolean> {
+    try {
+      const docRef = this.getDocRef(industryId, shopId, collectionName, docId);
+      await deleteDoc(docRef);
+      return true;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${this.getIsolatedPath(industryId, shopId, collectionName)}/${docId}`);
+      return false;
+    }
+  },
+
+  /**
+   * Sets up a real-time reactive subscription on the isolated collection path
+   */
+  subscribeCollection(
+    industryId: string, 
+    shopId: string, 
+    collectionName: string, 
+    onUpdate: (data: any[]) => void,
+    onError?: (err: any) => void
+  ) {
+    try {
+      const colRef = this.getCollectionRef(industryId, shopId, collectionName);
+      return onSnapshot(colRef, (snapshot) => {
+        const data: any[] = [];
+        snapshot.forEach(doc => {
+          data.push({ id: doc.id, ...doc.data(), shopId });
+        });
+        onUpdate(data);
+      }, (err) => {
+        if (onError) onError(err);
+        else console.error(`Subscription error for ${this.getIsolatedPath(industryId, shopId, collectionName)}:`, err);
+      });
+    } catch (error) {
+      console.error(`Failed to register snapshot listener for ${this.getIsolatedPath(industryId, shopId, collectionName)}`, error);
+      throw error;
+    }
+  }
+};
+

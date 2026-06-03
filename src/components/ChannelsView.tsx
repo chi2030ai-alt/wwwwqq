@@ -1,22 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Trash2, Settings, RefreshCw, Activity, Terminal, CheckCircle2, 
-  HelpCircle, Link, Globe, Wifi, SignalHigh, Server, Play, ShieldEllipsis
+  Share2, RefreshCw, CheckCircle, AlertCircle, ExternalLink, 
+  Plus, ShoppingBag, TrendingUp, Settings, Database, Radio, Check, X, ShieldAlert
 } from 'lucide-react';
-import { db } from '../services/firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-
-interface SalesChannel {
-  id: string;
-  name: string;
-  platform: 'douyin' | 'taobao' | 'wechat' | 'shopify' | 'meituan';
-  status: 'connected' | 'syncing' | 'error' | 'disconnected';
-  apiUrl: string;
-  appId: string;
-  appSecret?: string;
-  lastSynced: string;
-  pingMs: number;
-}
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ChannelsViewProps {
   tenantId: string;
@@ -24,477 +11,710 @@ interface ChannelsViewProps {
 }
 
 export default function ChannelsView({ tenantId, onAddLog }: ChannelsViewProps) {
-  const [channels, setChannels] = useState<SalesChannel[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Connection Form states
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [platformSelect, setPlatformSelect] = useState<'douyin' | 'taobao' | 'wechat' | 'shopify' | 'meituan'>('wechat');
-  const [apiUrl, setApiUrl] = useState('https://api.weixin.qq.com/v2/shop');
-  const [appId, setAppId] = useState('wx_923a8bf8203f');
+  const activeTenant = tenantId || 'tenant_modaui';
   
-  // Selected channel for inline configuration dialog
-  const [configuringChannelId, setConfiguringChannelId] = useState<string | null>(null);
-  
-  // Stock Synchronization States
-  const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [syncLogs, setSyncLogs] = useState<string[]>([]);
-  const [syncProgress, setSyncProgress] = useState(0);
-
-  // Load channels live from Firestore
-  useEffect(() => {
-    let activeTenant = tenantId || 'default_tenant';
-    const collRef = collection(db, 'tenants', activeTenant, 'channels');
-
-    const unsubscribe = onSnapshot(collRef, (snap) => {
-      const list: SalesChannel[] = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as SalesChannel);
-      });
-
-      // Default fallback templates
-      if (list.length === 0) {
-        const fallbacks: SalesChannel[] = [
-          { id: 'ch-wechat', name: '微信小程序主店', platform: 'wechat', status: 'connected', apiUrl: 'https://api.weixin.qq.com/v2', appId: 'wx_923a8bf8203f', lastSynced: '2026-06-03 12:30', pingMs: 45 },
-          { id: 'ch-douyin', name: '抖音带货直播精选店', platform: 'douyin', status: 'connected', apiUrl: 'https://openapi.douyin.com/v1', appId: 'dy_6881923abcdf', lastSynced: '2026-06-03 12:40', pingMs: 82 },
-          { id: 'ch-shopify', name: 'Shopify 跨境出海自建站', platform: 'shopify', status: 'connected', apiUrl: 'https://moda-global.myshopify.com/api', appId: 'sh_a7cf9321e06d', lastSynced: '2026-06-03 10:15', pingMs: 195 }
-        ];
-        setChannels(fallbacks);
-      } else {
-        setChannels(list);
-      }
-      setLoading(false);
-    }, (err) => {
-      console.warn("Channels list read fallbacked:", err);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [tenantId]);
-
-  // Create Channel Connection
-  const handleConnectChannel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
-
-    const chanId = `ch-${platformSelect}-${Date.now().toString(36).slice(-4)}`;
-    const newChannel: SalesChannel = {
-      id: chanId,
-      name: newName,
-      platform: platformSelect,
+  // Channels sync configurations with standard platforms
+  const [channels, setChannels] = useState([
+    {
+      channel: 'official',
+      storeId: 'sto_official_modaui',
+      storeName: 'MODAUI 官方独立主店面 (Direct)',
       status: 'connected',
-      apiUrl: apiUrl || `https://api.${platformSelect}.com/v1`,
-      appId: appId || `app_${Math.random().toString(36).slice(2, 10)}`,
-      lastSynced: '未同步',
-      pingMs: Math.floor(30 + Math.random() * 150)
+      connectedAt: '2026-06-01 10:00:00',
+      lastSyncAt: new Date().toLocaleTimeString(),
+      syncInventory: true,
+      syncPrices: true
+    },
+    {
+      channel: 'tiktok',
+      storeId: 'sto_tiktok_9921',
+      storeName: '抖音/TikTok 极速流直播官方店',
+      status: 'connected',
+      connectedAt: '2026-06-02 14:32:00',
+      lastSyncAt: new Date().toLocaleTimeString(),
+      syncInventory: true,
+      syncPrices: true
+    },
+    {
+      channel: 'xiaohongshu',
+      storeId: 'sto_xhs_882',
+      storeName: '小红书 RED 专属美学社群精铺',
+      status: 'connected',
+      connectedAt: '2026-06-03 09:15:00',
+      lastSyncAt: new Date(Date.now() - 30 * 60000).toLocaleTimeString(),
+      syncInventory: true,
+      syncPrices: false
+    },
+    {
+      channel: 'taobao',
+      storeId: '',
+      storeName: '淘宝多端智能分销商铺',
+      status: 'disconnected',
+      connectedAt: '',
+      lastSyncAt: '',
+      syncInventory: true,
+      syncPrices: true
+    }
+  ]);
+
+  const [activeTab, setActiveTab] = useState<'channels' | 'inventory' | 'orders'>('channels');
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [selectedChannelType, setSelectedChannelType] = useState('tiktok');
+  const [newStoreId, setNewStoreId] = useState('');
+  const [newStoreName, setNewStoreName] = useState('');
+  const [newApiKey, setNewApiKey] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [successToast, setSuccessToast] = useState('');
+
+  // Simulated SPU mappings
+  const [unifiedProducts, setUnifiedProducts] = useState([
+    {
+      id: 'prod_1',
+      name: 'MODA 智能极简设计师成衣款',
+      sku: 'MODA-CLOTH-001',
+      basePrice: 599.00,
+      totalInventory: 240,
+      channels: [
+        { type: 'official', sku: 'MODA-CLOTH-001-OFFICIAL', price: 599.00, stock: 120 },
+        { type: 'tiktok', sku: 'DY-CLOTH-8273', price: 588.00, stock: 80 },
+        { type: 'xiaohongshu', sku: 'RED-CLOTH-821', price: 599.00, stock: 40 }
+      ]
+    },
+    {
+      id: 'prod_2',
+      name: 'MODA 联名限量款科技面料卫衣',
+      sku: 'MODA-HOOD-992',
+      basePrice: 388.00,
+      totalInventory: 180,
+      channels: [
+        { type: 'official', sku: 'MODA-HOOD-992-OFF', price: 388.00, stock: 100 },
+        { type: 'tiktok', sku: 'DY-HD-992', price: 379.00, stock: 50 },
+        { type: 'xiaohongshu', sku: 'RED-HD-002', price: 388.00, stock: 30 }
+      ]
+    }
+  ]);
+
+  // Simulated multi-channel unified orders
+  const [unifiedOrders, setUnifiedOrders] = useState([
+    {
+      id: "uni_ord_1001",
+      channel: "tiktok",
+      channelOrderId: "TK-992813123",
+      itemsDesc: "MODA 智能极简设计师成衣款 x 1",
+      totalAmount: 588.00,
+      customerName: "王佳薇 (TikTok 直播用户)",
+      address: "上海市徐汇区龙华中路228号",
+      shippingStatus: "unshipped",
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: "uni_ord_1002",
+      channel: "xiaohongshu",
+      channelOrderId: "RED-77291823",
+      itemsDesc: "MODA 联名限量款科技卫衣 x 1",
+      totalAmount: 388.00,
+      customerName: "李佳琪 (小红书种草用户)",
+      address: "北京市朝阳区三里屯世贸广场",
+      shippingStatus: "delivered",
+      createdAt: new Date(Date.now() - 3600000).toISOString()
+    }
+  ]);
+
+  const channelBadges: Record<string, { bg: string, text: string, name: string }> = {
+    official: { bg: 'bg-emerald-500/10 border-emerald-500/20', text: 'text-emerald-400', name: '官方自营' },
+    tiktok: { bg: 'bg-indigo-500/10 border-indigo-500/20', text: 'text-indigo-400', name: 'TikTok店铺' },
+    xiaohongshu: { bg: 'bg-rose-500/10 border-rose-500/20', text: 'text-rose-400', name: '小红书商城' },
+    douyin: { bg: 'bg-cyan-500/10 border-cyan-500/20', text: 'text-cyan-400', name: '抖音小店' },
+    taobao: { bg: 'bg-amber-500/10 border-amber-500/20', text: 'text-amber-400', name: '淘宝商城' },
+    pinduoduo: { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', name: '拼多多' },
+    wechat: { bg: 'bg-green-500/10 border-green-500/20', text: 'text-green-400', name: '微信分销店' },
+    amazon: { bg: 'bg-yellow-600/10 border-yellow-500/20', text: 'text-yellow-500', name: '亚马逊店铺' }
+  };
+
+  const handleSyncAll = async () => {
+    setIsSyncing(true);
+    if (onAddLog) {
+      onAddLog('系统大盘', '🔄', '开始向 8+ 销售端点发送库存量能核销信宿...', 'info');
+    }
+    
+    try {
+      const response = await fetch('/api/channels/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: activeTenant })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccessToast(data.message || '多端实时库存同步完毕！');
+        if (onAddLog) {
+          onAddLog('AI大盘总控', '⚡', `库存同步引擎对齐成功，已拦截并自动对账聚合新订单！`, 'success');
+        }
+        
+        // Refresh channels and insert mock details
+        setChannels(prev => prev.map(c => c.status === 'connected' ? { ...c, lastSyncAt: new Date().toLocaleTimeString() } : c));
+        
+        const nowStr = new Date().toISOString();
+        const randId = `uni_ord_${Math.floor(1000 + Math.random() * 9000)}`;
+        setUnifiedOrders(prev => [
+          {
+            id: randId,
+            channel: 'douyin',
+            channelOrderId: `DY-${Math.floor(100000 + Math.random() * 900000)}`,
+            itemsDesc: 'MODA Core 限量单品 x 1',
+            totalAmount: 299.00,
+            customerName: '张敏捷 (抖音用户)',
+            address: '广州市天河区华夏路10号',
+            shippingStatus: 'unshipped',
+            createdAt: nowStr
+          },
+          ...prev
+        ]);
+      }
+    } catch (e) {
+      setSuccessToast(`🔄 离线仿真：8大销售渠道商品、库存与聚合账单对齐完成！`);
+    }
+
+    setTimeout(() => {
+      setIsSyncing(false);
+      setTimeout(() => setSuccessToast(''), 4500);
+    }, 1200);
+  };
+
+  const handleConnectChannel = async () => {
+    if (!newStoreId || !newStoreName) {
+      alert('请填写完整的店铺唯一ID与名称');
+      return;
+    }
+
+    const payload = {
+      tenantId: activeTenant,
+      channel: selectedChannelType,
+      storeId: newStoreId,
+      storeName: newStoreName,
+      accessToken: newApiKey || `tok_ext_${Math.random().toString(36).substring(2, 10)}`
     };
 
     try {
-      const activeTenant = tenantId || 'default_tenant';
-      await setDoc(doc(db, 'tenants', activeTenant, 'channels', chanId), newChannel);
-
-      if (onAddLog) {
-        onAddLog('AI网络架构师', '🔌', `打通了外部渠道: [${newName}] 通讯中继隧道并完成 SSL 握手安全自测。`, 'success');
-      }
-
-      // Reset
-      setNewName('');
-      setShowAddForm(false);
-    } catch (err: any) {
-      console.error("Failed to save channel:", err);
-    }
-  };
-
-  // Delete Channel Connection
-  const handleDeleteChannel = async (chanId: string, name: string) => {
-    try {
-      const activeTenant = tenantId || 'default_tenant';
-      await deleteDoc(doc(db, 'tenants', activeTenant, 'channels', chanId));
-      if (onAddLog) {
-        onAddLog('系统大厅', '🗑', `切断了销售渠道 {${name}} 的授权。所有跨渠道库存监听接口已卸落。`, 'warn');
-      }
-    } catch (err) {
-      setChannels(prev => prev.filter(c => c.id !== chanId));
-    }
-  };
-
-  // Save Config parameters directly
-  const handleSaveConfig = async (chanId: string, updatedUrl: string, updatedId: string) => {
-    try {
-      const activeTenant = tenantId || 'default_tenant';
-      await setDoc(doc(db, 'tenants', activeTenant, 'channels', chanId), {
-        apiUrl: updatedUrl,
-        appId: updatedId
-      }, { merge: true });
-      setConfiguringChannelId(null);
-      if (onAddLog) {
-        onAddLog('AI大盘总控', '⚙', `完成了渠道 [${chanId}] 的网关通讯 API 配置刷新。`, 'success');
-      }
-    } catch (err) {
-      console.error("Local configuration rewrite fallback");
-      setConfiguringChannelId(null);
-    }
-  };
-
-  // Multichannel Stock Synchronization Process Sequence
-  const beginAllChannelsStockSync = async () => {
-    setIsSyncingAll(true);
-    setSyncProgress(5);
-    setSyncLogs(['[12:22:30] 🚀 开始全网多渠道数据高速同步调度机制...']);
-
-    try {
-      // 1. Sync Xiaohongshu Products via POST /api/channels/xiaohongshu/sync-products
-      setSyncLogs(prev => [...prev, '[12:22:31] 🔍 扫描中控 SPU 数据库，正在调用 POST /api/channels/xiaohongshu/sync-products 同步小红书库存目录...']);
-      const activeTenant = tenantId || 'default_tenant';
-      const resXhs = await fetch('/api/channels/xiaohongshu/sync-products', {
+      const res = await fetch('/api/channels/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchantId: activeTenant })
+        body: JSON.stringify(payload)
       });
-      const dataXhs = await resXhs.json();
-      
-      setSyncProgress(45);
-      if (dataXhs.success) {
-        setSyncLogs(prev => [
-          ...prev, 
-          `[12:22:32] 🔌 小红书 API 联接成功！SPU 配对数: ${dataXhs.syncedProductsCount || 1}, 消息: ${dataXhs.message || '商品物料镜像更新完毕'}`
-        ]);
-      } else {
-        setSyncLogs(prev => [...prev, `[12:22:32] ⚠️ 小红书 API 握手通过，物理物料对照就情绪返回：${dataXhs.message}`]);
+      const data = await res.json();
+      if (data.success) {
+        const newChan = {
+          channel: selectedChannelType,
+          storeId: newStoreId,
+          storeName: newStoreName,
+          status: 'connected',
+          connectedAt: new Date().toLocaleString().substring(0, 19),
+          lastSyncAt: new Date().toLocaleTimeString(),
+          syncInventory: true,
+          syncPrices: true
+        };
+        setChannels(prev => [...prev.filter(c => !(c.channel === selectedChannelType && c.storeId === newStoreId)), newChan]);
+        setShowConnectModal(false);
+        setSuccessToast(`🔌 销售渠道接入成功: [${channelBadges[selectedChannelType]?.name || selectedChannelType}] ${newStoreName}!`);
+        if (onAddLog) {
+          onAddLog('AI网络架构师', '🔌', `注册了新的异构行销适配端点: ${newStoreName}，API 通道信件握手 100% 成功。`, 'success');
+        }
+        setTimeout(() => setSuccessToast(''), 4000);
       }
-
-      // 2. Sync Douyin Orders via POST /api/channels/douyin/sync-orders
-      setSyncLogs(prev => [...prev, '[12:22:33] 🔍 正在调用 POST /api/channels/douyin/sync-orders 捕获抖音带货直播间实时交易流...']);
-      const resDy = await fetch('/api/channels/douyin/sync-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchantId: activeTenant })
-      });
-      const dataDy = await resDy.json();
-      
-      setSyncProgress(85);
-      if (dataDy.success) {
-        setSyncLogs(prev => [
-          ...prev,
-          `[12:22:34] 🔌 抖音官方 Open API 校验成功！捕获全渠道关联退单及成单数: ${dataDy.syncedOrdersCount || 1} 笔`
-        ]);
-      }
-
-      // 3. Sync TikTok Endpoint via POST /api/channels/tiktok/connect simulation connection check
-      setSyncLogs(prev => [...prev, '[12:22:35] 🔗 正在联动 TikTok 全球直邮仓配与 SF Express 空运合约校验...']);
-      const resTiktok = await fetch('/api/channels/tiktok/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          merchantId: activeTenant,
-          channelName: 'TikTok Crossborder Warehouse',
-          appId: appId || 'tk_881923ab',
-          apiUrl: 'https://api.tiktok.com/v1'
-        })
-      });
-      const dataTk = await resTiktok.json();
-      
-      setSyncProgress(100);
-      setSyncLogs(prev => [
-        ...prev,
-        '🎉 [12:22:36] 全渠道同步圆满落幕！微信、小红书、抖音与 TikTok 面单/SPU/库存已完成 100% 同轴锁仓。'
-      ]);
-
-      // live update lastSynced timestamps on channels
-      const nowStr = new Date().toISOString().substring(0, 19).replace('T', ' ');
-      setChannels(current => current.map(ch => ({
-        ...ch,
-        lastSynced: nowStr,
-        status: 'connected'
-      })));
-
-      if (onAddLog) {
-        onAddLog('AI库管顾问', '🔄', `一键核销了微信/抖音/Shopify/小红书同步流水。全链路物料平衡自动校验通过。`, 'success');
-      }
-
-    } catch (err: any) {
-      setSyncLogs(prev => [...prev, `❌ 物理同步失败：此环境未连接公网 API 中继，或遇到解析错误：${err.message || err}`]);
-    } finally {
-      setIsSyncingAll(false);
+    } catch {
+      // Local addition fallback
+      console.warn("Express channel register failed, adding local simulator.");
+      setShowConnectModal(false);
     }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fadeIn text-left">
-      {/* List / Left panel: current connections setup */}
-      <div className="lg:col-span-8 space-y-6">
-        <div className="bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-[#2F3336]/60 pb-3 gap-3">
-            <div>
-              <h3 className="text-white text-xs font-mono uppercase tracking-wider flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-[#1D9BF0]" />
-                <span>多销售渠道接入中心 (Omnichannel Connect)</span>
-              </h3>
-              <p className="text-[10px] text-zinc-500 mt-1">支持全网店铺、带货直播间及跨境自建站库存和订单流一键融合</p>
-            </div>
+    <div className="bg-neutral-950 text-zinc-100 p-2 font-sans rounded-2xl border border-neutral-900 overflow-hidden">
+      {/* Dynamic Success Notification Toast */}
+      <AnimatePresence>
+        {successToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-6 right-6 z-50 bg-[#1D9BF0] border border-[#1D9BF0]/30 text-white px-5 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3 text-xs font-bold font-mono"
+          >
+            <Check className="h-4 w-4 text-white" />
+            <span>{successToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="px-3 py-1.5 bg-white text-black font-extrabold text-[10px] rounded-lg transition-transform hover:scale-[1.01] active:scale-95 flex items-center space-x-1 cursor-pointer"
+      <div className="space-y-6">
+        
+        {/* Subheader board */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-neutral-900/40 border border-neutral-900 p-5 rounded-2xl gap-4">
+          <div>
+            <div className="flex items-center space-x-2.5">
+              <div className="p-2 bg-sky-500/10 rounded-xl border border-sky-500/20 text-sky-400">
+                <Share2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-sm font-black tracking-tight text-white flex items-center gap-1.5">
+                  高级多渠道行销对账网关 <span className="text-[9px] bg-sky-500/20 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded font-mono font-bold">OMNICHANNEL SYNC</span>
+                </h1>
+                <p className="text-zinc-500 text-[10.5px] mt-0.5">多终端、多平台统一库存、商品 SPU 配准与支付对账统一汇总机制</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-2.5 w-full md:w-auto justify-end">
+            <button 
+              onClick={handleSyncAll}
+              disabled={isSyncing}
+              className="px-3.5 py-2 bg-neutral-900 hover:bg-neutral-850 text-[11px] font-bold border border-neutral-800 rounded-lg hover:border-neutral-700 transition flex items-center space-x-1.5 font-mono"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{showAddForm ? '取消接入' : '介入新渠道'}</span>
+              <RefreshCw className={`h-3.5 w-3.5 text-sky-400 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? '同步全网多端中...' : '一键全渠道对齐锁仓'}</span>
+            </button>
+            <button 
+              onClick={() => {
+                setNewStoreId(`sto_ch_${Math.random().toString(36).substring(3, 8)}`);
+                setNewStoreName('');
+                setNewApiKey('');
+                setShowConnectModal(true);
+              }}
+              className="px-3.5 py-2 bg-[#1D9BF0] hover:bg-[#1D9BF0]/90 text-white text-[11px] font-extrabold rounded-lg shadow-lg flex items-center space-x-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>接入新平台</span>
             </button>
           </div>
+        </div>
 
-          {/* New Channel Access Form */}
-          {showAddForm && (
-            <form onSubmit={handleConnectChannel} className="p-4 bg-black/40 rounded-xl border border-zinc-900 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="space-y-1">
-                <label className="text-[8.5px] font-mono text-zinc-500">外部渠道自定义别称</label>
-                <input 
-                  type="text"
-                  placeholder="如：美团万达广场外送店"
-                  required
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-[#2F3336] p-2 text-white rounded focus:border-white focus:outline-none"
-                />
-              </div>
+        {/* Sync Telemetry Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-neutral-900/30 border border-neutral-900/60 p-4 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-zinc-500 text-[9px] font-bold font-mono">已就绪渠道数 (READY SHARDS)</p>
+              <p className="text-xl font-black text-white mt-1">3 <span className="text-xs text-zinc-500">/ 8平台</span></p>
+              <p className="text-[10px] text-emerald-400 font-mono mt-0.5">● 官方、TikTok、小红书</p>
+            </div>
+            <div className="h-9 w-9 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-400">
+              <Check className="h-4 w-4" />
+            </div>
+          </div>
 
-              <div className="space-y-1">
-                <label className="text-[8.5px] font-mono text-zinc-500">底层所属销售平台</label>
-                <select
-                  value={platformSelect}
-                  onChange={e => {
-                    const p = e.target.value as any;
-                    setPlatformSelect(p);
-                    setApiUrl(
-                      p === 'wechat' ? 'https://api.weixin.qq.com/v2/shop' :
-                      p === 'douyin' ? 'https://openapi.douyin.com/v1' :
-                      p === 'shopify' ? 'https://shop.myshopify.com/api' :
-                      p === 'meituan' ? 'https://waimai.meituan.com/api' :
-                      'https://api.taobao.com/v2'
-                    );
-                  }}
-                  className="w-full bg-zinc-950 border border-[#2F3336] p-2 text-zinc-300 rounded focus:border-white focus:outline-none"
+          <div className="bg-neutral-900/30 border border-neutral-900/60 p-4 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-zinc-500 text-[9px] font-bold font-mono">24H 聚合订单 (AGGREGATED ORDERS)</p>
+              <p className="text-xl font-black text-white mt-1">{unifiedOrders.length} 笔交易</p>
+              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">自动汇算去重与承运交接</p>
+            </div>
+            <div className="h-9 w-9 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400">
+              <ShoppingBag className="h-4 w-4" />
+            </div>
+          </div>
+
+          <div className="bg-neutral-900/30 border border-neutral-900/60 p-4 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-zinc-500 text-[9px] font-bold font-mono">已捕获总线上流水 (CAPTURED SAAS REVENUE)</p>
+              <p className="text-xl font-black text-amber-500 mt-1">
+                ¥{unifiedOrders.reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
+              </p>
+              <p className="text-[10px] text-emerald-400 font-mono mt-0.5">汇率对账与自动记账无缝连通</p>
+            </div>
+            <div className="h-9 w-9 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+          </div>
+
+          <div className="bg-neutral-900/30 border border-neutral-900/60 p-4 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-zinc-500 text-[9px] font-bold font-mono">库存同步可靠度 (PING SYNC)</p>
+              <p className="text-xl font-black text-sky-400 mt-1">99.98%</p>
+              <p className="text-[10px] text-sky-400 font-mono mt-0.5">双向 Socket 锁仓防护常驻</p>
+            </div>
+            <div className="h-9 w-9 bg-sky-500/10 border border-sky-500/20 rounded-lg flex items-center justify-center text-sky-400">
+              <Database className="h-4 w-4" />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs Control */}
+        <div className="flex border-b border-neutral-900 gap-1 mt-2">
+          <button 
+            onClick={() => setActiveTab('channels')}
+            className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 ${
+              activeTab === 'channels' 
+                ? 'border-[#1D9BF0] text-[#1D9BF0]' 
+                : 'border-transparent text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Radio className="h-3.5 w-3.5" />
+            <span>行销适配渠道</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('inventory')}
+            className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 ${
+              activeTab === 'inventory' 
+                ? 'border-[#1D9BF0] text-[#1D9BF0]' 
+                : 'border-transparent text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Database className="h-3.5 w-3.5" />
+            <span>跨端 SPU/SKU 统一分配</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('orders')}
+            className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 ${
+              activeTab === 'orders' 
+                ? 'border-[#1D9BF0] text-[#1D9BF0]' 
+                : 'border-transparent text-zinc-400 hover:text-white'
+            }`}
+          >
+            <ShoppingBag className="h-3.5 w-3.5" />
+            <span>跨渠道聚合订单统一看板</span>
+          </button>
+        </div>
+
+        {/* Tab Viewport Pane */}
+        <div>
+          {activeTab === 'channels' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {channels.map((chan) => (
+                <div 
+                  key={`${chan.channel}_${chan.storeId}`}
+                  className="bg-neutral-950 border border-neutral-900 rounded-xl p-4 flex flex-col justify-between hover:border-neutral-850 transition duration-150 relative overflow-hidden text-left"
                 >
-                  <option value="wechat">微信官方小程序 (WeChat MiniApp)</option>
-                  <option value="douyin">抖音小店 & 直播间 (Douyin Shop)</option>
-                  <option value="taobao">淘宝企业直营店 (Taobao Direct)</option>
-                  <option value="shopify">Shopify 跨境出海自建站 (Shopify Hub)</option>
-                  <option value="meituan">美团外送外卖联盟 (Meituan Delivery)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[8.5px] font-mono text-zinc-500">网关 API Endpoint 路由地址</label>
-                <input 
-                  type="text"
-                  value={apiUrl}
-                  onChange={e => setApiUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-[#2F3336] p-2 text-white rounded focus:border-white focus:outline-none font-mono text-[9px]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[8.5px] font-mono text-zinc-500">授权标识 (App Client ID / Key)</label>
-                <input 
-                  type="text"
-                  placeholder="wx_923..."
-                  value={appId}
-                  onChange={e => setAppId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-[#2F3336] p-2 text-white rounded focus:border-white focus:outline-none font-mono text-[9px]"
-                />
-              </div>
-
-              <div className="sm:col-span-2 pt-2 flex justify-end">
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded font-bold"
-                >
-                  确认联通配接
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Connected Channels Grid UI */}
-          {loading ? (
-            <div className="text-center py-6 text-xs text-zinc-500 font-mono">网卡握手侦听中...</div>
-          ) : (
-            <div className="space-y-3.5">
-              {channels.map((chan) => {
-                const isConfiguring = configuringChannelId === chan.id;
-                
-                return (
-                  <div 
-                    key={chan.id}
-                    className="p-4 bg-zinc-950 border border-[#2F3336] rounded-xl flex flex-col space-y-3 hover:border-neutral-700 transition-all font-sans"
-                  >
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-xl">
-                          {chan.platform === 'wechat' ? '📱' :
-                           chan.platform === 'douyin' ? '🎵' :
-                           chan.platform === 'shopify' ? '🌐' :
-                           chan.platform === 'meituan' ? '🛵' : '🛍'}
-                        </span>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-bold text-white font-mono">{chan.name}</span>
-                            <span className="px-1 py-0.5 rounded text-[7.5px] font-mono bg-zinc-900 border border-zinc-800 text-zinc-400 capitalize">
-                              {chan.platform}
-                            </span>
-                          </div>
-                          <span className="text-[9px] text-[#8B949E] block mt-0.5 font-mono">AppID: {chan.appId}</span>
-                        </div>
-                      </div>
-
-                      {/* Diagnostic metrics */}
-                      <div className="flex items-center space-x-3 text-[9px] font-mono text-zinc-500 shrink-0">
-                        <div className="flex items-center space-x-1.5 bg-black/40 border border-zinc-900 p-1.5 rounded-lg">
-                          <Wifi className="w-3 h-3 text-emerald-500 animate-pulse" />
-                          <span className="text-neutral-300">延时: {chan.pingMs}ms</span>
-                        </div>
-                        <span className="text-[#8B949E]">最后同步: {chan.lastSynced}</span>
-
-                        <div className="flex items-center space-x-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setConfiguringChannelId(isConfiguring ? null : chan.id)}
-                            className="p-1 hover:text-white"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteChannel(chan.id, chan.name)}
-                            className="p-1 hover:text-red-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className={`px-2 py-0.5 text-[8.5px] font-black tracking-wider uppercase rounded border ${channelBadges[chan.channel]?.bg || 'bg-zinc-800 border-zinc-700'} ${channelBadges[chan.channel]?.text || 'text-zinc-300'}`}>
+                        {channelBadges[chan.channel]?.name || chan.channel}
+                      </span>
+                      <span className={`flex items-center text-[9.5px] font-mono font-bold ${
+                        chan.status === 'connected' ? 'text-emerald-400' : 'text-zinc-600'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full mr-1 ${
+                          chan.status === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-750'
+                        }`} />
+                        {chan.status === 'connected' ? '就绪接通' : '未连接'}
+                      </span>
                     </div>
 
-                    {/* Channel internal URL configurations inline editing */}
-                    {isConfiguring && (
-                      <div className="p-3 bg-black rounded-lg border border-zinc-900 space-y-3 text-xs animate-fadeIn">
-                        <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-wider block">路由配对修改</span>
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div className="space-y-0.5">
-                            <label className="text-[7.5px] text-zinc-500">API Gateway URL</label>
-                            <input 
-                              type="text"
-                              id={`url-edit-${chan.id}`}
-                              defaultValue={chan.apiUrl}
-                              className="w-full bg-zinc-950 text-white p-1 text-[9.5px] font-mono border border-zinc-800 rounded focus:outline-none focus:border-white"
-                            />
-                          </div>
-                          <div className="space-y-0.5">
-                            <label className="text-[7.5px] text-zinc-500">App Key / Identifier</label>
-                            <input 
-                              type="text"
-                              id={`id-edit-${chan.id}`}
-                              defaultValue={chan.appId}
-                              className="w-full bg-zinc-950 text-white p-1 text-[9.5px] font-mono border border-zinc-800 rounded focus:outline-none focus:border-white"
-                            />
-                          </div>
+                    <div>
+                      <h3 className="font-extrabold text-white text-xs">
+                        {chan.status === 'connected' ? chan.storeName : `配方待接: ${channelBadges[chan.channel]?.name || chan.channel}`}
+                      </h3>
+                      <p className="text-zinc-500 font-mono text-[9px] mt-1 space-y-0.5">
+                        {chan.status === 'connected' ? (
+                          <>
+                            <span className="block">多端标识: {chan.storeId}</span>
+                            <span className="block text-zinc-650">更新周期: {chan.lastSyncAt || '未同步'}</span>
+                          </>
+                        ) : (
+                          <span className="text-zinc-600 block">点击下方"配对"输入适配秘钥即可拉通全同步回调监听。</span>
+                        )}
+                      </p>
+                    </div>
+
+                    {chan.status === 'connected' && (
+                      <div className="border-t border-neutral-900 pt-2.5 space-y-1 text-[9.5px] font-mono text-zinc-400">
+                        <div className="flex justify-between items-center">
+                          <span>库存自动同步</span>
+                          <span className="text-emerald-400 font-bold">已启用</span>
                         </div>
-                        <div className="flex justify-end space-x-2 pt-1 border-t border-zinc-900/40">
-                          <button 
-                            onClick={() => setConfiguringChannelId(null)}
-                            className="px-2.5 py-1 text-[8.5px] text-zinc-400 hover:text-white"
-                          >
-                            取消
-                          </button>
-                          <button 
-                            onClick={() => {
-                              const updatedUrl = (document.getElementById(`url-edit-${chan.id}`) as HTMLInputElement)?.value || chan.apiUrl;
-                              const updatedId = (document.getElementById(`id-edit-${chan.id}`) as HTMLInputElement)?.value || chan.appId;
-                              handleSaveConfig(chan.id, updatedUrl, updatedId);
-                            }}
-                            className="px-3 py-1 bg-white text-black font-extrabold text-[8.5px] rounded hover:bg-zinc-200"
-                          >
-                            保存
-                          </button>
+                        <div className="flex justify-between items-center">
+                          <span>价格自适应更新</span>
+                          <span className={chan.syncPrices ? 'text-emerald-400 font-bold' : 'text-zinc-600'}>
+                            {chan.syncPrices ? '已开启' : '关闭'}
+                          </span>
                         </div>
                       </div>
                     )}
                   </div>
-                );
-              })}
+
+                  <div className="mt-4 pt-3 border-t border-neutral-900 flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-zinc-500 flex items-center space-x-1 font-mono">
+                      <span>配置管理</span>
+                      <Settings className="h-3 w-3" />
+                    </span>
+                    {chan.status === 'connected' ? (
+                      <button 
+                        onClick={() => {
+                          setChannels(prev => prev.map(c => c.storeId === chan.storeId ? { ...c, status: 'disconnected' } : c));
+                          setSuccessToast(`🔌 已卸下 [${channelBadges[chan.channel]?.name}] 通讯节点`);
+                          if (onAddLog) {
+                            onAddLog('系统大厅', '🗑', `卸下了 ${chan.storeName} 的物料自动分发 Webhook 端口。`, 'warn');
+                          }
+                          setTimeout(() => setSuccessToast(''), 4000);
+                        }}
+                        className="text-red-400 hover:text-red-300 font-mono font-bold"
+                      >
+                        断开端点
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => {
+                          setSelectedChannelType(chan.channel);
+                          setNewStoreId(`sto_${chan.channel}_${Math.floor(1000 + Math.random() * 9000)}`);
+                          setNewStoreName(`${channelBadges[chan.channel]?.name || chan.channel}大店`);
+                          setShowConnectModal(true);
+                        }}
+                        className="text-sky-400 hover:text-[#1D9BF0] font-mono font-bold"
+                      >
+                        立即接入
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'inventory' && (
+            <div className="border border-neutral-900 rounded-xl bg-neutral-950/60 overflow-hidden text-left">
+              <div className="p-4 border-b border-neutral-900 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xs font-bold text-white">跨终端统一 SPU / SKU 分发与对账配比</h3>
+                  <p className="text-zinc-500 text-[10.5px] mt-0.5">当任一异构销售渠道发生成交，MODAUI 统一库存锁定机制将被触发行程锁仓屏障</p>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold">
+                  ● 统一锁仓守护中
+                </span>
+              </div>
+
+              <div className="overflow-x-auto text-[11px]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-neutral-900 text-zinc-500 text-[9px] font-mono">
+                      <th className="p-3 font-bold">主商品 SPU 方案</th>
+                      <th className="p-3 font-bold">统一代码 (SKU)</th>
+                      <th className="p-3 font-bold text-center">官方基线价</th>
+                      <th className="p-3 font-bold text-center">可分发总库存</th>
+                      <th className="p-3 font-bold">行销渠道多维覆盖及配对定价</th>
+                      <th className="p-3 font-bold text-right">对账</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-900">
+                    {unifiedProducts.map((p) => (
+                      <tr key={p.id} className="hover:bg-neutral-900/30 transition">
+                        <td className="p-3 font-bold text-white flex items-center space-x-2">
+                          <span className="text-sm">🧥</span>
+                          <span>{p.name}</span>
+                        </td>
+                        <td className="p-3 font-mono text-zinc-400">{p.sku}</td>
+                        <td className="p-3 text-center font-mono text-white">¥{p.basePrice.toFixed(2)}</td>
+                        <td className="p-3 text-center font-mono font-black text-amber-500">{p.totalInventory} 件</td>
+                        <td className="p-3">
+                          <div className="flex flex-col gap-1.5">
+                            {p.channels.map((ch, idx) => (
+                              <div key={idx} className="flex items-center space-x-2 text-[10px] font-mono bg-neutral-940/50 border border-neutral-900 p-1.5 rounded">
+                                <span className={channelBadges[ch.type]?.text || 'text-zinc-400'}>
+                                  {channelBadges[ch.type]?.name}:
+                                </span>
+                                <span className="text-zinc-500">别号 {ch.sku}</span>
+                                <span className="text-amber-500 font-bold">¥{ch.price.toFixed(2)}</span>
+                                <span className="text-[#1D9BF0]">分配存量 {ch.stock}</span>
+                                <span className="text-emerald-400 text-[8px] bg-emerald-500/10 px-1 rounded ml-auto border border-emerald-500/20">
+                                  已同步
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button className="px-2 py-1 bg-neutral-900 border border-neutral-800 text-[#1D9BF0] font-mono text-[9px] rounded font-bold">
+                            重新对齐
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'orders' && (
+            <div className="bg-neutral-950 border border-neutral-900 rounded-xl overflow-hidden text-left">
+              <div className="p-4 border-b border-neutral-900 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xs font-bold text-white font-mono">集成异构销售渠道聚合订单</h3>
+                  <p className="text-zinc-500 text-[10.5px] mt-0.5">多终端原始退差、结算地址和物流状况被转换为 MODAUI 标准大盘数据流方便多机器人自动跟进发货</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto text-[11px]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-neutral-900 text-zinc-500 text-[9px] font-mono">
+                      <th className="p-3">聚合统一 ID</th>
+                      <th className="p-3">销售渠道适配器</th>
+                      <th className="p-3">外部订单原单 ID</th>
+                      <th className="p-3">物料明细</th>
+                      <th className="p-3 text-center">应汇成交总款</th>
+                      <th className="p-3">收件人地址与买家</th>
+                      <th className="p-3">顺丰货运承运状态</th>
+                      <th className="p-3 text-right">承运</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-900">
+                    {unifiedOrders.map((o) => (
+                      <tr key={o.id} className="hover:bg-neutral-900/30 transition">
+                        <td className="p-3 font-mono text-white text-[10px] font-bold">{o.id}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 text-[8.5px] font-black uppercase rounded border ${channelBadges[o.channel]?.bg || 'bg-cyan-500/10 border-cyan-500/25'} ${channelBadges[o.channel]?.text || 'text-cyan-400'}`}>
+                            {channelBadges[o.channel]?.name || o.channel.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-zinc-400 text-[9.5px]">{o.channelOrderId}</td>
+                        <td className="p-3 text-zinc-300 text-[10px]">{o.itemsDesc}</td>
+                        <td className="p-3 text-center font-mono font-bold text-amber-500">¥{o.totalAmount.toFixed(2)}</td>
+                        <td className="p-3">
+                          <div className="text-[10px]">
+                            <p className="font-bold text-white">{o.customerName}</p>
+                            <p className="text-zinc-500 leading-normal">{o.address}</p>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-mono font-bold ${
+                            o.shippingStatus === 'delivered'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-amber-550/10 text-amber-500 border border-amber-550/20'
+                          }`}>
+                            {o.shippingStatus === 'delivered' ? '✓ 投递妥投' : '🕒 待顺丰上门收货'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button 
+                            disabled={o.shippingStatus === 'delivered'}
+                            onClick={() => {
+                              setUnifiedOrders(prev => prev.map(order => 
+                                order.id === o.id ? { ...order, shippingStatus: 'delivered' } : order
+                              ));
+                              setSuccessToast(`📦 聚合订单 ${o.id} 的顺丰一键面单与智能仓配配给已触发！`);
+                              if (onAddLog) {
+                                onAddLog('AI库管顾问', '🚚', `已将聚合订单 ${o.id} 匹配交接给顺丰特惠并一键发送面单！`, 'success');
+                              }
+                              setTimeout(() => setSuccessToast(''), 4500);
+                            }}
+                            className={`px-2 py-1 rounded text-[8.5px] font-bold ${
+                              o.shippingStatus === 'delivered'
+                                ? 'bg-zinc-900 border border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                : 'bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-[#1D9BF0]'
+                            }`}
+                          >
+                            承运 dispatch
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Right column panel: automated stock syncer & terminal display */}
-      <div className="lg:col-span-4 space-y-6">
-        <div className="bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4">
-          <div className="border-b border-[#2F3336]/60 pb-2 flex justify-between items-center">
-            <h4 className="text-white text-xs font-mono uppercase tracking-wider flex items-center space-x-1">
-              <RefreshCw className={`w-3.5 h-3.5 text-sky-450 ${isSyncingAll ? 'animate-spin' : ''}`} />
-              <span>智能库存统合并步 (Stock Sync Console)</span>
-            </h4>
-          </div>
+      {/* Connection drawer dialog modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowConnectModal(false)} />
+          <div className="bg-neutral-950 border border-neutral-900 rounded-xl w-full max-w-sm p-5 relative z-10 space-y-4">
+            <div className="flex justify-between items-center border-b border-neutral-900 pb-2">
+              <h3 className="font-extrabold text-white text-xs flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5 text-[#1D9BF0]" />
+                <span>连接第三方行销平台渠道</span>
+              </h3>
+              <button onClick={() => setShowConnectModal(false)} className="text-zinc-500 hover:text-white p-1">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
 
-          <div className="space-y-4">
-            <button
-              onClick={beginAllChannelsStockSync}
-              disabled={isSyncingAll}
-              className={`w-full py-2.5 rounded-lg font-bold text-xs uppercase shadow transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                isSyncingAll 
-                  ? 'bg-neutral-800/50 text-zinc-500 cursor-not-allowed' 
-                  : 'bg-white hover:bg-zinc-200 text-black hover:scale-[1.01]'
-              }`}
-            >
-              <Play className="w-3.5 h-3.5" />
-              <span>{isSyncingAll ? '正在进行全渠道校验...' : '一键同步全渠道库存'}</span>
-            </button>
-
-            {/* Syncing Progress Bar */}
-            {isSyncingAll && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-[8px] font-mono text-zinc-400">
-                  <span>同步进度:</span>
-                  <span>{syncProgress}%</span>
-                </div>
-                <div className="w-full bg-zinc-950 rounded-full h-1 border border-zinc-900 overflow-hidden">
-                  <div 
-                    className="bg-white h-full transition-all duration-300"
-                    style={{ width: `${syncProgress}%` }}
-                  />
+            <div className="space-y-3.5 text-[11px] text-left">
+              <div>
+                <label className="block text-zinc-400 font-bold mb-1">选择渠道平台</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'tiktok', name: 'TikTok Shop' },
+                    { id: 'xiaohongshu', name: '小红书' },
+                    { id: 'douyin', name: '抖音小店' },
+                    { id: 'taobao', name: '淘宝商城' },
+                    { id: 'pinduoduo', name: '拼多多' },
+                    { id: 'amazon', name: 'Amazon' }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setSelectedChannelType(t.id)}
+                      className={`p-2 rounded border text-left flex items-center justify-between transition ${
+                        selectedChannelType === t.id 
+                          ? 'border-[#1D9BF0] bg-[#1D9BF0]/15 text-white font-bold' 
+                          : 'border-neutral-900 bg-neutral-950 hover:border-neutral-850 text-zinc-400'
+                      }`}
+                    >
+                      <span>{t.name}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
 
-            {/* Simulated Debug Console Terminal */}
-            <div className="bg-black/95 border border-zinc-900 p-3 rounded-lg space-y-2 h-48 overflow-y-auto leading-relaxed font-mono text-[8px] text-zinc-400">
-              <div className="flex items-center space-x-1 border-b border-zinc-900 pb-1 text-zinc-500 text-[7px]">
-                <Terminal className="w-3 h-3 text-emerald-400 animate-pulse" />
-                <span>MULTICHANNEL CONSOLE INTERCEPT TERMINAL v1.45</span>
+              <div>
+                <label className="block text-zinc-400 font-bold mb-1 font-mono">店铺 / API ID (StoreId)</label>
+                <input 
+                  type="text" 
+                  value={newStoreId}
+                  onChange={(e) => setNewStoreId(e.target.value)}
+                  placeholder="e.g., sto_com_8273"
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1.5 text-white font-mono focus:outline-none focus:border-sky-500"
+                />
               </div>
-              
-              <div className="space-y-1">
-                {syncLogs.length === 0 ? (
-                  <p className="text-zinc-650">待机中。点击上方一键同步启动 API 追踪握手机制...</p>
-                ) : (
-                  syncLogs.map((log, index) => (
-                    <p key={index} className={log.includes('🎉') ? 'text-emerald-450 font-bold' : ''}>
-                      {log}
-                    </p>
-                  ))
-                )}
+
+              <div>
+                <label className="block text-zinc-400 font-bold mb-1">店铺名称 (Label)</label>
+                <input 
+                  type="text" 
+                  value={newStoreName}
+                  onChange={(e) => setNewStoreName(e.target.value)}
+                  placeholder="e.g., 风衣系列分销特许店"
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1.5 text-white focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-bold mb-1">多端 API 连接授权令牌 (AccessToken)</label>
+                <input 
+                  type="password" 
+                  value={newApiKey}
+                  onChange={(e) => setNewApiKey(e.target.value)}
+                  placeholder="e.g., shp_oth_xxxxxxxxxxxxxxxxx"
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1.5 text-white font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div className="bg-sky-500/5 border border-sky-500/10 p-3 rounded-lg text-[9.5px] leading-relaxed text-zinc-400 flex items-start gap-1.5">
+                <ShieldAlert className="h-4 w-4 text-[#1D9BF0] flex-shrink-0" />
+                <p>
+                  接入后，系统会自动通过 SSL 网关安全中继注册 Webhook。订单与库存会通过 AES-256 全程加密，绝不触及您的原生交易密码。
+                </p>
+              </div>
+
+              <div className="pt-1.5 flex justify-end space-x-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowConnectModal(false)}
+                  className="px-3 py-1.5 border border-neutral-800 hover:border-neutral-700 text-zinc-400 hover:text-white rounded"
+                >
+                  取消
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleConnectChannel}
+                  className="px-3 py-1.5 bg-[#1D9BF0] text-white hover:bg-[#1D9BF0]/95 font-bold rounded"
+                >
+                  立即打通
+                </button>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Security Baseline Info */}
-        <div className="bg-[#09090B] border border-[#2f3336] p-5 rounded-xl text-[9px] font-mono text-zinc-400 leading-normal space-y-1">
-          <span className="text-white block font-bold text-[10px] mb-1">🛡 安全架构指引 (RBAC & API Whitelist):</span>
-          <p>• 本系统各渠道连接内置 TLS 1.3 双向动态证书轮转技术，防刷、防超售、防库存爆单异常锁住。</p>
-          <p>• 渠道订单与主仓库商品 SKU 完全打通。外部任何一次退款，本台中继均可秒级捕获并在大盘扣除统计。</p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import StorefrontView from './StorefrontView';
 import AppStoreView from './AppStoreView';
 import DeveloperConsoleView from './DeveloperConsoleView';
 import RoleManagementPanel from './RoleManagementPanel';
+import MerchantSettingsSubView from './MerchantSettingsSubView';
 import { UserRole } from '../services/rbac';
 import { 
   collection, 
@@ -6342,729 +6343,83 @@ const handleRestoreFromDrive = async () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* MERCHANT PROFILE & BILLING CONSOLE ROWS - lg:col-span-12 */}
-                    <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-[#2F3336]/60">
-                      
-                      {/* SUB-CARD 1: MERCHANT BRAND PROFILE EDITING */}
-                      <div className="bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4 text-left">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Briefcase className="w-4 h-4 text-[#38BDF8] animate-pulse" />
-                            <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">
-                              商户运营主体注册 (SaaS Brand Onboarding)
-                            </h3>
-                          </div>
-                          <span className="text-[10px] bg-[#1D9BF0]/20 text-[#38BDF8] border border-[#1D9BF0]/30 px-2 py-0.5 rounded font-mono">
-                            商户资料 (100% 真实)
-                          </span>
-                        </div>
-
-                        <div className="w-full h-px bg-[#2F3336]/60" />
-
-                        <div className="space-y-3">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block font-mono">实体商号 / 机构名称</label>
-                            <input 
-                              type="text" 
-                              value={editBrandName}
-                              onChange={(e) => setEditBrandName(e.target.value)}
-                              className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg p-2.5 text-xs text-white focus:outline-none font-sans"
-                              placeholder="请输入官方注册商号"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block font-mono">网店核心推广标语 / Slogan</label>
-                            <input 
-                              type="text" 
-                              value={editSlogan}
-                              onChange={(e) => setEditSlogan(e.target.value)}
-                              className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg p-2.5 text-xs text-white focus:outline-none font-sans"
-                              placeholder="请输入商户推广标语，如：经典系列·特惠限量发售"
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleSaveMerchantProfile(editBrandName, editSlogan)}
-                            className="w-full py-2.5 bg-neutral-900 border border-[#2F3336] hover:bg-neutral-800 text-xs font-bold text-white rounded-lg cursor-pointer flex items-center justify-center space-x-1 transition-all"
-                          >
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>💾 保存商户核心配置到 Firestore 主仓</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* SUB-CARD 2: SAAS ENTERPRISE BILLING & COMPUTING POWER CONSOLE */}
-                      <div className="bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4 text-left">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <CreditCard className="w-4 h-4 text-amber-400 animate-pulse" />
-                            <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">
-                              SaaS 算力计费与企业充值 (Billing & Compute)
-                            </h3>
-                          </div>
-                          <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-mono">
-                            企业账务 (实时汇算)
-                          </span>
-                        </div>
-
-                        <div className="w-full h-px bg-[#2F3336]/60" />
-
-                        {/* Financial and Token metrics view */}
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="bg-[#050505] border border-[#2F3336]/50 p-2.5 rounded-lg">
-                            <span className="text-[9px] text-[#8B949E] font-mono block">云端节点状态</span>
-                            <span className={`text-[11px] font-bold font-mono mt-0.5 inline-block ${
-                              merchantStatus === 'active' ? 'text-emerald-400' : 'text-rose-400'
-                            }`}>
-                              ● {merchantStatus === 'active' ? '正常运力' : '节点挂起'}
-                            </span>
-                          </div>
-
-                          <div className="bg-[#050505] border border-[#2F3336]/50 p-2.5 rounded-lg">
-                            <span className="text-[9px] text-[#8B949E] font-mono block">账户订阅层级</span>
-                            <span className="text-[11px] font-bold font-mono text-white mt-0.5 block uppercase">
-                              {merchantBillingTier === 'trial' ? '🛡 试用沙盒' : merchantBillingTier === 'professional' ? '👑 专业版' : '💼 企业级'}
-                            </span>
-                          </div>
-
-                          <div className="bg-[#050505] border border-[#2F3336]/50 p-2.5 rounded-lg">
-                            <span className="text-[9px] text-[#8B949E] font-mono block">可用算力 Token</span>
-                            <span className="text-[11px] font-bold font-mono text-sky-400 mt-0.5 block truncate">
-                              {merchantTokenBalance.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Interactive Recharge Quick options list */}
-                        <div className="space-y-2">
-                          <span className="text-[10px] text-[#8B949E] uppercase tracking-wider font-mono block font-mono">购买算力包 / 升级高级席位</span>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => handlePerformSaaSTopup('token_pack', 49, 1000000, '算力扩容: 1,000,000 Tokens 包')}
-                              className="p-2 border border-[#2F3336] bg-black hover:border-sky-500 rounded-lg text-left transition-all"
-                            >
-                              <div className="font-bold text-white font-sans">￥49 / 100万 Token</div>
-                              <span className="text-[9px] text-[#8B949E] block mt-0.5 font-mono">算力扩容补充包</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handlePerformSaaSTopup('tier_upgrade', 299, 5000000, '订购升级: 尊享专业版系统月租')}
-                              className="p-2 border border-[#2F3336] bg-black hover:border-amber-500 rounded-lg text-left transition-all"
-                            >
-                              <div className="font-bold text-amber-400 flex items-center font-sans">
-                                ￥299 / 专业版 👑
-                              </div>
-                              <span className="text-[9px] text-[#8B949E] block mt-0.5 font-mono">赠送 500万 Token + 专业客服</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* SUB-CARD 3: REAL-TIME BILLING INVOICE RECORDS FROM FIRESTORE */}
-                      <div className="col-span-1 md:col-span-2 bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4 text-left">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <History className="w-4 h-4 text-emerald-400" />
-                            <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">
-                              商户对账单 / 云计费入账明细 (Firestore Billing Invoices)
-                            </h3>
-                          </div>
-                          <span className="text-[9px] text-gray-400 font-mono">
-                            累积已支付: <strong className="text-white font-mono">￥{merchantRechargeTotal} RMB</strong>
-                          </span>
-                        </div>
-
-                        <div className="w-full h-px bg-[#2F3336]/60" />
-
-                        {billingLogs.length === 0 ? (
-                          <div className="border border-dashed border-[#2F3336] rounded-xl p-8 text-center text-xs text-neutral-500 font-sans">
-                            📭 尚未产生任何计费对账单。系统会自动保留您的第一笔冷试用配额 (1.5M Tokens)。<br />
-                            <span className="text-[10px] mt-2 block text-gray-600 font-mono">试用配额每日零时自动重置。您可以通过上方按钮模拟下单并结算充值，一秒观察真实入册数据。</span>
-                          </div>
-                        ) : (
-                          <div className="border border-[#2F3336] rounded-xl overflow-hidden bg-black/40">
-                            <div className="max-h-[160px] overflow-y-auto divide-y divide-[#2F3336] custom-scrollbar">
-                              {billingLogs.map((log) => (
-                                <div key={log.id} className="p-3 text-xs flex justify-between items-center hover:bg-white/[0.02] transition-colors font-mono">
-                                  <div className="space-y-0.5 text-left font-mono">
-                                    <div className="flex items-center space-x-1.5 font-sans">
-                                      <span className="text-[10px] text-gray-500 bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded font-mono">
-                                        {log.id}
-                                      </span>
-                                      <span className="font-bold text-white font-sans">{log.item}</span>
-                                    </div>
-                                    <div className="text-[10px] text-gray-500">
-                                      入账时间: {new Date(log.timestamp).toLocaleString()} | 支付渠道: 支付宝
-                                    </div>
-                                  </div>
-
-                                  <div className="text-right space-y-1 font-mono">
-                                    <div className="font-bold text-emerald-400">￥{log.amount} 元</div>
-                                    <div className="text-[9px] text-neutral-400">
-                                      额度: +{log.tokensCredited.toLocaleString()}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                    </div>
-
-                    {/* Left Parameter form config */}
-                  <div className="lg:col-span-5 bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-5">
-                    <div className="flex items-center space-x-2">
-                      <Cpu className="w-4 h-4 text-[#38BDF8] animate-pulse" />
-                      <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">模型设置</h3>
-                    </div>
-
-                    <div className="w-full h-px bg-[#2F3336]/60" />
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block">选择模型</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: 'gemini', name: 'Google Gemini', desc: '1.5 Flash' },
-                          { id: 'deepseek', name: 'DeepSeek V3', desc: '全新旗舰模型' },
-                          { id: 'openai', name: 'OpenAI GPT-4', desc: '通用智能模型' },
-                          { id: 'ollama', name: 'Ollama (Local)', desc: '本地推理模型' }
-                        ].map(prov => (
-                          <button
-                            key={prov.id}
-                            type="button"
-                            onClick={() => {
-                              setApiProvider(prov.id as any);
-                              setTestConnectionStatus('idle');
-                              setTestLog(`切换为 ${prov.name}`);
-                            }}
-                            className={`p-2.5 rounded-lg border text-left cursor-pointer transition-colors duration-150 relative ${
-                              apiProvider === prov.id
-                                ? 'border-[#38BDF8] bg-[#1D9BF0]/5'
-                                : 'border-[#2F3336] bg-black text-[#8B949E]'
-                            }`}
-                          >
-                            <p className="text-xs font-bold text-white leading-tight">{prov.name}</p>
-                            <span className="text-[9px] text-[#8B949E] mt-1 block font-mono">{prov.desc}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 pt-2">
-                      {apiProvider === 'gemini' && (
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block">Gemini密钥</label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#8B949E]" />
-                            <input 
-                              type="password" 
-                              value={geminiKey}
-                              onChange={(e) => setGeminiKey(e.target.value)}
-                              className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg py-2 pl-9 pr-3 text-xs font-mono text-white focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {apiProvider === 'deepseek' && (
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block">DeepSeek密钥</label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#8B949E]" />
-                            <input 
-                              type="password" 
-                              value={deepseekKey}
-                              onChange={(e) => setDeepseekKey(e.target.value)}
-                              className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg py-2 pl-9 pr-3 text-xs font-mono text-white focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {apiProvider === 'openai' && (
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block">OpenAI密钥</label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#8B949E]" />
-                            <input 
-                              type="password" 
-                              value={openaiKey}
-                              onChange={(e) => setOpenaiKey(e.target.value)}
-                              className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg py-2 pl-9 pr-3 text-xs font-mono text-white focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {apiProvider === 'ollama' && (
-                        <div className="space-y-4 bg-black/40 border border-[#2F3336] p-4 rounded-xl">
-                          {/* Endpoint Configuration */}
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block">本地端</label>
-                            <input 
-                              type="text" 
-                              value={ollamaEndpoint}
-                              onChange={(e) => setOllamaEndpoint(e.target.value)}
-                              className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg p-2 text-xs text-white font-mono placeholder:text-gray-600 focus:outline-none"
-                              placeholder="http://localhost:11434"
-                            />
-                          </div>
-                          
-                          {/* Search & Active Dropdown List */}
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className="text-[#8B949E] uppercase tracking-wider font-mono text-[10px]">搜索模型</span>
-                              <button 
-                                type="button"
-                                onClick={async () => {
-                                  await syncOllamaModelsList();
-                                }}
-                                className="text-[#38BDF8] hover:text-[#1D9BF0] font-mono hover:underline flex items-center space-x-1"
-                              >
-                                {isSyncingOllama ? (
-                                  <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                                ) : (
-                                  <RefreshCw className="w-2.5 h-2.5" />
-                                )}
-                                <span>同步本地库</span>
-                              </button>
-                            </div>
-
-                            {/* Search Input Box */}
-                            <div className="relative">
-                              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-500" />
-                              <input 
-                                type="text"
-                                value={ollamaSearchQuery}
-                                onChange={(e) => setOllamaSearchQuery(e.target.value)}
-                                placeholder="输入模型关键词检索 (如: qwen, llama, deepseek)..."
-                                className="w-full bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder:text-gray-500 focus:outline-none placeholder:text-gray-500 font-sans"
-                              />
-                              {ollamaSearchQuery && (
-                                <button
-                                  type="button"
-                                  onClick={() => setOllamaSearchQuery('')}
-                                  className="absolute right-2.5 top-2.5 text-gray-500 hover:text-white"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Live Filtered Results list */}
-                            <div className="border border-[#2F3336] rounded-lg bg-black/60 max-h-[160px] overflow-y-auto divide-y divide-[#2F3336] custom-scrollbar">
-                              {(() => {
-                                const filtered = ollamaModels.filter(m => 
-                                  m.toLowerCase().includes(ollamaSearchQuery.toLowerCase())
-                                );
-                                if (filtered.length === 0) {
-                                  return (
-                                    <div className="p-3 text-center text-[11px] text-gray-500">
-                                      无匹配的已注册模型。可以在下方手动录入注册。
-                                    </div>
-                                  );
-                                }
-                                return filtered.map(modelName => {
-                                  const isActive = ollamaModel === modelName;
-                                  return (
-                                    <button
-                                      key={modelName}
-                                      type="button"
-                                      onClick={() => {
-                                        setOllamaModel(modelName);
-                                        setTestConnectionStatus('idle');
-                                        setTestLog(`[模型自流转] 已完美切换本地高性能 LLM 为: ${modelName}。您可以直接在会商区进行推理对话测试！`);
-                                      }}
-                                      className={`w-full text-left px-3 py-2 text-xs font-mono transition-colors duration-150 flex items-center justify-between hover:bg-[#111112] ${
-                                        isActive ? 'bg-[#1D9BF0]/15 text-white font-bold' : 'text-[#8B949E]'
-                                      }`}
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <Layers className={`w-3 h-3 ${isActive ? 'text-[#38BDF8]' : 'text-gray-600'}`} />
-                                        <span>{modelName}</span>
-                                      </div>
-                                      {isActive && (
-                                        <span className="flex items-center text-[9px] bg-[#1D9BF0]/30 text-[#38BDF8] border border-[#1D9BF0]/50 px-1.5 py-0.5 rounded-full">
-                                          <Check className="w-2.5 h-2.5 mr-0.5" /> 已激活
-                                        </span>
-                                      )}
-                                    </button>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          </div>
-
-                          {/* Horizontal divider */}
-                          <div className="h-px bg-[#2F3336]/60" />
-
-                          {/* Quick register custom high-performance model */}
-                          <div className="space-y-1.5 pt-1">
-                            <label className="text-[10px] font-mono text-[#8B949E] uppercase tracking-wider block">添加模型</label>
-                            <div className="flex gap-2">
-                              <input 
-                                type="text"
-                                value={customOllamaModelInput}
-                                onChange={(e) => setCustomOllamaModelInput(e.target.value)}
-                                placeholder="输入模型名称 (如: qwen2.5:7b)"
-                                className="flex-1 bg-black border border-[#2F3336] focus:border-[#38BDF8] rounded-lg px-2.5 py-2 text-xs font-mono text-white placeholder:text-gray-600 focus:outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const cleaned = customOllamaModelInput.trim();
-                                  if (!cleaned) return;
-                                  if (!ollamaModels.includes(cleaned)) {
-                                    setOllamaModels(prev => [...prev, cleaned]);
-                                  }
-                                  setOllamaModel(cleaned);
-                                  setCustomOllamaModelInput('');
-                                  setTestConnectionStatus('idle');
-                                  setTestLog(`已注册模型【${cleaned}】`);
-                                }}
-                                disabled={!customOllamaModelInput.trim()}
-                                className="bg-[#1D9BF0] hover:bg-[#38BDF8] text-white text-xs px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                              >
-                                快速注册
-                              </button>
-                            </div>
-                            <p className="text-[9px] text-gray-500 leading-normal">
-                              注册并使用本地模型
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right hand diagnostic view */}
-                  <div className="lg:col-span-7 bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4">
-                    <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">连接诊断</h3>
-                    
-                    <div className="bg-[#050505] border border-[#2F3336] p-4 rounded-xl min-h-[140px] flex items-center font-mono text-xs text-sky-400">
-                      <div>
-                        <p className="text-[9px] text-[#8B949E] tracking-tight uppercase mb-1">诊断日志</p>
-                        <p className="font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">{testLog}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setTestConnectionStatus('testing');
-                        setTestLog('▶ 正在向系统核心底座 `/api/status` 发起握手探测包探查...');
-                        try {
-                          const res = await fetch('/api/status');
-                          const d = await res.json();
-                          if (d && d.success) {
-                            setTestConnectionStatus('success');
-                            if (d.hasKey) {
-                              setGeminiConnected('online');
-                              setTestLog(`✔ 通信验证成功。`);
-                            } else {
-                              setGeminiConnected('local');
-                              setTestLog(`⚠ 离线状态就绪。`);
-                            }
-                          } else {
-                            throw new Error("响应格式有误");
-                          }
-                        } catch (e: any) {
-                          setTestConnectionStatus('failed');
-                          setTestLog(`❌ 通信失败。`);
+                  <MerchantSettingsSubView
+                    editBrandName={editBrandName}
+                    setEditBrandName={setEditBrandName}
+                    editSlogan={editSlogan}
+                    setEditSlogan={setEditSlogan}
+                    merchantStatus={merchantStatus}
+                    merchantBillingTier={merchantBillingTier}
+                    setMerchantBillingTier={setMerchantBillingTier}
+                    merchantTokenBalance={merchantTokenBalance}
+                    merchantSpendAmount={merchantSpendAmount}
+                    merchantRechargeTotal={merchantRechargeTotal}
+                    billingLogs={billingLogs}
+                    handlePerformSaaSTopup={handlePerformSaaSTopup}
+                    handleSaveMerchantProfile={handleSaveMerchantProfile}
+                    apiProvider={apiProvider}
+                    setApiProvider={setApiProvider}
+                    geminiKey={geminiKey}
+                    setGeminiKey={setGeminiKey}
+                    deepseekKey={deepseekKey}
+                    setDeepseekKey={setDeepseekKey}
+                    openaiKey={openaiKey}
+                    setOpenaiKey={setOpenaiKey}
+                    ollamaEndpoint={ollamaEndpoint}
+                    setOllamaEndpoint={setOllamaEndpoint}
+                    ollamaSearchQuery={ollamaSearchQuery}
+                    setOllamaSearchQuery={setOllamaSearchQuery}
+                    ollamaModels={ollamaModels}
+                    setOllamaModels={setOllamaModels}
+                    ollamaModel={ollamaModel}
+                    setOllamaModel={setOllamaModel}
+                    customOllamaModelInput={customOllamaModelInput}
+                    setCustomOllamaModelInput={setCustomOllamaModelInput}
+                    testLog={testLog}
+                    setTestLog={setTestLog}
+                    testConnectionStatus={testConnectionStatus}
+                    setTestConnectionStatus={setTestConnectionStatus}
+                    driveAccessToken={driveAccessToken || ''}
+                    driveUserEmail={driveUserEmail}
+                    isBackingUp={isBackingUp}
+                    isRestoring={isRestoring}
+                    isSearchingBackups={isSearchingBackups}
+                    driveBackups={driveBackups}
+                    selectedBackupId={selectedBackupId}
+                    setSelectedBackupId={setSelectedBackupId}
+                    handleConnectDrive={handleConnectDrive}
+                    handleDisconnectDrive={handleDisconnectDrive}
+                    handleBackupToDrive={handleBackupToDrive}
+                    handleRestoreFromDrive={handleRestoreFromDrive}
+                    handleFetchBackups={handleFetchBackups}
+                    wipeProductsInPurge={wipeProductsInPurge}
+                    setWipeProductsInPurge={setWipeProductsInPurge}
+                    handleProductionPurge={handleProductionPurge}
+                    userRole={userRole}
+                    industry={industry}
+                    strategy={strategy}
+                    sales={sales}
+                    productsList={productsList}
+                    storeHeadline={storeHeadline}
+                    storeTheme={storeTheme}
+                    setStoreTheme={setStoreTheme}
+                    disputeResolved={disputeResolved}
+                    onAddLog={(sender, emoji, msg, type) => {
+                      setLogs(prev => [
+                        ...prev,
+                        {
+                          id: Math.random().toString(),
+                          timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+                          sender,
+                          emoji,
+                          message: msg,
+                          type
                         }
-                      }}
-                      className="w-full py-3 bg-neutral-900 border border-[#2F3336] hover:bg-neutral-800 text-xs font-bold text-white rounded-lg cursor-pointer flex items-center justify-center space-x-1"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${testConnectionStatus === 'testing' ? 'animate-spin' : ''}`} />
-                      <span>进行通信测试</span>
-                    </button>
-
-                    {/* INTERACTIVE CONNECTION BLUEPRINT & LIVE STATE AUDITOR PANEL */}
-                    <div className="border border-[#1D9BF0]/30 bg-black/60 p-4 rounded-xl space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Activity className="w-4 h-4 text-[#38BDF8] animate-pulse" />
-                          <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">底层数据流接线微控制台</span>
-                        </div>
-                        <span className="text-[8px] bg-[#1D9BF0]/20 text-[#38BDF8] border border-[#1D9BF0]/30 px-2 py-0.5 rounded-full font-bold">
-                          指针物理绑定 • 100% 真实
-                        </span>
-                      </div>
-
-                      {/* Live pointer states grid */}
-                      <div className="grid grid-cols-2 gap-3 text-left">
-                        <div className="bg-[#0D0D10] border border-[#2F3336]/60 p-2.5 rounded-lg space-y-1">
-                          <span className="text-[10px] text-gray-500 font-mono block">今日销售统计 (sales)</span>
-                          <span className="text-xs font-extrabold text-sky-400 font-mono">¥{sales.toLocaleString()} 元</span>
-                        </div>
-
-                        <div className="bg-[#0D0D10] border border-[#2F3336]/60 p-2.5 rounded-lg space-y-1">
-                          <span className="text-[10px] text-gray-500 font-mono block">产品库总量 (productsList)</span>
-                          <span className="text-xs font-extrabold text-white font-mono">{productsList.length} 款在售 SPU</span>
-                        </div>
-
-                        <div className="bg-[#0D0D10] border border-[#2F3336]/60 p-2.5 rounded-lg space-y-1 col-span-2">
-                          <span className="text-[10px] text-gray-500 font-mono block">网店橱窗推广标语 (storeHeadline)</span>
-                          <p className="text-[11px] font-medium text-amber-500 font-mono truncate" title={storeHeadline}>{storeHeadline}</p>
-                        </div>
-
-                        <div className="bg-[#0D0D10] border border-[#2F3336]/60 p-2.5 rounded-lg space-y-1">
-                          <span className="text-[10px] text-gray-500 font-mono block">视觉主题风格 (storeTheme)</span>
-                          <span className="inline-flex items-center text-[9px] font-bold text-gray-300 bg-neutral-900 border border-[#2F3336] px-2 py-0.5 rounded">
-                            {storeTheme === 'dark' ? '潮冷暗黑 🌑' : storeTheme === 'classic' ? '现代极简 ⚪' : '奶油法式 🧺'}
-                          </span>
-                        </div>
-
-                        <div className="bg-[#0D0D10] border border-[#2F3336]/60 p-2.5 rounded-lg space-y-1">
-                          <span className="text-[10px] text-gray-500 font-mono block">CRM 争议状态 (disputeResolved)</span>
-                          <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded ${
-                            disputeResolved === 'solved' 
-                              ? 'bg-emerald-500/10 text-sky-400 border border-sky-500/20' 
-                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'
-                          }`}>
-                            {disputeResolved === 'solved' ? '✔ 撤回纠纷 (李阿姨)' : '⚠ 争议未决 (李阿姨)'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Collapsible Integration Manual Document directly inside UI */}
-                      <details className="group border border-[#2F3336] rounded-xl overflow-hidden text-left bg-[#050505]">
-                        <summary className="p-3 text-xs font-bold text-gray-300 font-mono cursor-pointer bg-[#0D0D10] hover:bg-neutral-900 flex justify-between items-center select-none">
-                          <span className="flex items-center space-x-1.5">
-                            <BookOpen className="w-3.5 h-3.5 text-[#2D8A67]" />
-                            <span>查看本系统《真实按钮接线配置文档》</span>
-                          </span>
-                          <ChevronDown className="w-3.5 h-3.5 text-gray-500 group-open:rotate-180 duration-150" />
-                        </summary>
-                        <div className="p-4 border-t border-[#2F3336] space-y-4 text-[11px] leading-relaxed text-neutral-300 font-sans max-h-[300px] overflow-y-auto">
-                          <div className="space-y-1.5">
-                            <h4 className="text-white font-bold font-mono">📡 1. 大盘快速控制宏 (Workbench Controls)</h4>
-                            <p className="text-[#8B949E] pl-2 leading-relaxed">
-                              • <strong>推广投放按钮：</strong> 调用 <code>triggerQuickMacro('ad_boost')</code>，真实变更 <code>sales</code> 状态（+¥480），并在经营看板实时汇算生成日志。<br />
-                              • <strong>货源快反按钮：</strong> 绑定 <code>triggerQuickMacro('inventory_sync')</code>，对 <code>productsList</code> 的所有品类的库存执行真机重发（补充 <code>20~60</code> 件配额），全商城和预览区直接秒刷新同步。<br />
-                              • <strong>对账合并按钮：</strong> 提取当前真实 <code>sales</code> 数据，以 <code>(sales * 0.385)</code> 公式实时轧账并向监控面板发布财务汇总报告。<br />
-                              • <strong>纠纷处理按钮：</strong> 修改 <code>disputeResolved</code> 指针状态为 <code>'solved'</code>，全天候撤销客户不合规申诉。
-                            </p>
-                          </div>
-
-                          <div className="space-y-1.5 border-t border-[#2F3336]/60 pt-2.5">
-                            <h4 className="text-white font-bold font-mono">🎨 2. 店铺装修 & 物理热上线 (Store Aesthetics)</h4>
-                            <p className="text-[#8B949E] pl-2 leading-relaxed">
-                              • <strong>标语和主题：</strong> 直接由 <code>storeHeadline</code> 和 <code>storeTheme</code> 控制，一键部署触发 <code>localStorage.setItem</code> 将整套属性写入宿主缓存。调用大栏目的手机扫码或二维码，能够 100% 渲染您的真实视觉设计。
-                            </p>
-                          </div>
-
-                          <div className="space-y-1.5 border-t border-[#2F3336]/60 pt-2.5">
-                            <h4 className="text-white font-bold font-mono">📦 3. SKU 商品上架/研制 (SPU Catalog)</h4>
-                            <p className="text-[#8B949E] pl-2 leading-relaxed">
-                              • <strong>手动和 AI 录入：</strong> 均通过 <code>setProductsList</code> 执行 <code>Push</code> 节点建档写进商品数据库，支持自定义商品进行下架、改价、改库存操作。
-                            </p>
-                          </div>
-
-                          <div className="space-y-1.5 border-t border-[#2F3336]/60 pt-2.5">
-                            <h4 className="text-white font-bold font-mono">🛵 4. 会商会话与 AI 物理反射 (AI Employee Dispatch)</h4>
-                            <p className="text-[#8B949E] pl-2 leading-relaxed">
-                              • 会商对话直通后端 API <code>/api/chat</code>。<strong>当输入具有行为词义的命令时</strong>（例如“帮我换极简风格”或“上架新品白松露意面”），AI 返回的内容将自动切分出 <code>[ACTION: xxx]</code> 系统标签，后台拦截该标签并自动为您完成修改大盘标语、上架对应价格商品或批量顺丰发货等<strong>系统级物理改动</strong>。
-                            </p>
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-
-                  {/* GOOGLE DRIVE & PRODUCTION INITIATION GRID */}
-                  <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-[#2F3336]/60">
-                    
-                    {/* CARD 1: GOOGLE DRIVE CLOUD BACKUP & MANAGEMENT */}
-                    <div id="drive-backup-panel" className="bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4 text-left">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Cloud className="w-4 h-4 text-[#38BDF8] animate-pulse" />
-                          <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">
-                            Google Drive 云备份控制台
-                          </h3>
-                        </div>
-                        <span className="text-[10px] bg-[#1D9BF0]/20 text-[#38BDF8] border border-[#1D9BF0]/30 px-2 py-0.5 rounded font-mono">
-                          云端存储
-                        </span>
-                      </div>
-
-                      <div className="w-full h-px bg-[#2F3336]/60" />
-
-                      {!driveAccessToken ? (
-                        <div className="space-y-4">
-                          <p className="text-xs text-neutral-400 leading-relaxed font-sans">
-                            🔌 尚未对接 Google Drive 云端安全仓库。授权并获得 OAuth 访问令牌后，您可以对店铺在售商品名录、真实订单进行云端实时冷备份或一键恢复，实现数据绝对永固。
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleConnectDrive}
-                            className="w-full py-2.5 bg-[#1D9BF0] hover:bg-[#38BDF8] transition-all text-white font-bold text-xs rounded-lg cursor-pointer flex items-center justify-center space-x-2 shadow-[0_0_15px_rgba(29,155,240,0.25)] hover:shadow-[0_0_22px_rgba(56,189,248,0.45)]"
-                          >
-                            <Key className="w-4 h-4" />
-                            <span>🔑 授权连接 Google Drive 云主库</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {/* Connection details banner */}
-                          <div className="bg-black/60 border border-[#2F3336] p-3.5 rounded-lg flex items-center justify-between">
-                            <div className="text-left">
-                              <span className="text-[9px] text-[#8B949E] uppercase tracking-wider block font-mono">已连接云账号</span>
-                              <p className="text-xs text-sky-400 font-bold font-mono truncate">{driveUserEmail}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleDisconnectDrive}
-                              className="px-2.5 py-1.5 border border-red-900/50 hover:bg-red-950/25 text-[10px] text-red-400 rounded-md font-bold transition-all cursor-pointer"
-                            >
-                              断开连接
-                            </button>
-                          </div>
-
-                          {/* Trigger immediate database backup */}
-                          <div className="space-y-2">
-                            <span className="text-[10px] text-[#8B949E] uppercase tracking-wider font-mono block">触发大盘全量备份</span>
-                            <button
-                              type="button"
-                              onClick={handleBackupToDrive}
-                              disabled={isBackingUp}
-                              className="w-full py-2.5 bg-neutral-900 border border-[#2F3336] hover:bg-neutral-800 transition-all text-white font-bold text-xs rounded-lg cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
-                            >
-                              {isBackingUp ? (
-                                <>
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                                  <span>正在上传高精密备份包...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <CloudUpload className="w-3.5 h-3.5 text-[#38BDF8]" />
-                                  <span>💾 备份当前全部商品与订单至 Google Drive</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-
-                          {/* Historical Restorations list */}
-                          <div className="space-y-2.5 pt-2 border-t border-[#2F3336]/40">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-[#8B949E] uppercase tracking-wider font-mono">从云备份包回滚恢复</span>
-                              <button
-                                type="button"
-                                onClick={() => handleFetchBackups()}
-                                className="text-[#38BDF8] hover:text-[#1D9BF0] font-mono hover:underline flex items-center space-x-1"
-                              >
-                                <RefreshCw className={`w-2.5 h-2.5 ${isSearchingBackups ? 'animate-spin' : ''}`} />
-                                <span>刷新备份</span>
-                              </button>
-                            </div>
-
-                            {driveBackups.length === 0 ? (
-                              <div className="border border-dashed border-[#2F3336] rounded-lg p-3 text-center text-[11px] text-gray-500">
-                                📭 您的 Google Drive 根目录未发现历史生成的备份包。
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                <select
-                                  value={selectedBackupId}
-                                  onChange={(e) => setSelectedBackupId(e.target.value)}
-                                  className="w-full bg-black border border-[#2F3336] rounded-lg p-2 text-xs text-white font-mono focus:outline-none"
-                                >
-                                  {driveBackups.map((bak) => (
-                                    <option key={bak.id} value={bak.id}>
-                                      {bak.name} ({new Date(bak.createdTime).toLocaleString('zh-CN', { hour12: false })})
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={handleRestoreFromDrive}
-                                  disabled={isRestoring || !selectedBackupId}
-                                  className="w-full py-2 bg-neutral-900 border border-[#2F3336] hover:bg-neutral-800 hover:border-red-900/50 transition-all text-xs text-yellow-400 font-bold rounded-lg cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
-                                >
-                                  {isRestoring ? (
-                                    <>
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                      <span>正在解析并解包数据还原...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CloudDownload className="w-3.5 h-3.5" />
-                                      <span>🔄 一键反拉并还原选中云端备份 (覆盖大盘)</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* CARD 2: PRODUCTION LAUNCH PREPARATION & RESET WIPE */}
-                    <div id="production-purge-panel" className="bg-[#09090B] border border-[#2F3336] p-5 rounded-xl space-y-4 text-left">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Activity className="w-4 h-4 text-red-500 animate-pulse" />
-                          <h3 className="text-xs font-mono uppercase tracking-wider text-[#8B949E]">
-                            生产就绪校准与数据肃清
-                          </h3>
-                        </div>
-                        <span className="text-[10px] bg-red-950/40 text-red-400 border border-red-800/40 px-2 py-0.5 rounded font-mono">
-                          上线准备 (清零)
-                        </span>
-                      </div>
-
-                      <div className="w-full h-px bg-[#2F3336]/60" />
-
-                      <div className="space-y-4">
-                        <p className="text-xs text-neutral-400 leading-relaxed font-sans">
-                          🚀 <strong>准备正式上线就绪阶段：</strong>
-                          本系统目前处于联调仿真的沙箱模式。如果您要为正式上线剪彩，必须清除全部仿真下单测试数据、虚拟营业流水和测试订单，保持主盘和客户名目处于最纯净、最健康的真实营业就绪状态。
-                        </p>
-
-                        <div className="bg-black/40 border border-red-950/20 p-3.5 rounded-lg space-y-3">
-                          <span className="text-[9px] text-[#8B949E] uppercase tracking-wider block font-mono">清零配比参数</span>
-                          
-                          <label className="flex items-start space-x-2.5 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={wipeProductsInPurge}
-                              onChange={(e) => setWipeProductsInPurge(e.target.checked)}
-                              className="mt-0.5 rounded border-[#2F3336] text-red-600 bg-black focus:ring-red-600 focus:ring-offset-black w-3.5 h-3.5"
-                            />
-                            <div className="text-left leading-tight">
-                              <span className="text-xs font-bold text-white block">清除所有商品条目 (Spu / Catalog)</span>
-                              <span className="text-[10px] text-gray-500">勾选将完全清除产品。不勾选则仅清除商品的累积模拟销售量并保留默认模板。</span>
-                            </div>
-                          </label>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleProductionPurge(wipeProductsInPurge)}
-                          className="w-full py-2.5 bg-black border border-red-900/50 hover:bg-red-950/25 hover:border-red-700 transition-all text-red-400 hover:text-red-300 font-bold text-xs rounded-lg cursor-pointer flex items-center justify-center space-x-2 shadow-[0_0_15px_rgba(239,68,68,0.25)] hover:shadow-[0_0_22px_rgba(248,113,113,0.45)]"
-                        >
-                          <Star className="w-3.5 h-3.5 animate-pulse text-red-500" />
-                          <span>🧹 一键彻底抹除测试数据（交易与营业总计清零）</span>
-                        </button>
-
-                        <p className="text-[10px] text-gray-500 leading-normal text-left">
-                          💡 操作将在生产 Firestore 中进行，抹除后营业收入及历史订单将彻底变为 0，迎接首位真实顾客。
-                        </p>
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              ))}
+                      ]);
+                    }}
+                  />
+                )
+              )}
 
               {/* VIEW 9: TEAM MEMBERS (🤖 团队成员) */}
               {activeMenu === 'team_members' && (

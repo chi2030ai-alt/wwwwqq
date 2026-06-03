@@ -105,5 +105,21 @@ export const rbacService = {
       return ['Staff', 'Customer'];
     }
     return ['Customer'];
+  },
+
+  /**
+   * RBAC Industry Level Authorization Check.
+   * Restricts user from viewing or working with teams outside of their authorized vertical industry.
+   */
+  canAccessAITeam(role: UserRole, userIndustryId: string | null, targetIndustryId: string): boolean {
+    if (role === 'Platform Admin') {
+      return true; // Super admin has global cross-industry overrides
+    }
+    if (!userIndustryId) {
+      return true; // If no locked industry constraint, allow by default as guest/setup phase
+    }
+    // Strict comparison
+    return userIndustryId.toLowerCase() === targetIndustryId.toLowerCase();
   }
 };
+

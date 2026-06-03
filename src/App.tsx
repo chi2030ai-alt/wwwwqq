@@ -556,7 +556,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <AITeamsView onBackToLanding={() => setStep('LANDING')} />
+            <AITeamsView userRole={userRole} onBackToLanding={() => setStep('LANDING')} />
           </motion.div>
         )}
 
