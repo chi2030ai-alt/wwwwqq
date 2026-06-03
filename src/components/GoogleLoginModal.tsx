@@ -332,9 +332,21 @@ export default function GoogleLoginModal({ userEmail = 'guest@gmail.com', onSucc
           
           {/* Error display */}
           {errorMsg && (
-            <div className="p-3.5 bg-rose-950/20 border border-rose-500/30 rounded-lg text-rose-300 text-xs leading-relaxed">
-              <span className="font-bold flex items-center mb-0.5">⚠️ 联接故障反馈:</span>
-              {errorMsg}
+            <div className="p-3.5 bg-rose-950/20 border border-rose-500/30 rounded-lg text-rose-300 text-xs leading-relaxed space-y-2">
+              <div>
+                <span className="font-bold flex items-center mb-0.5">⚠️ 联接故障反馈:</span>
+                {errorMsg}
+              </div>
+              {errorMsg.includes('网域') && (
+                <button
+                  type="button"
+                  onClick={handleBypassLogIn}
+                  className="w-full mt-2 bg-sky-500 text-white font-bold py-1.5 px-3 rounded text-[11px] hover:bg-sky-400 transition-all cursor-pointer text-center flex items-center justify-center space-x-1 shadow-lg"
+                >
+                  <Fingerprint className="w-3.5 h-3.5 animate-pulse" />
+                  <span>直接一键使用「免签通道」进入系统</span>
+                </button>
+              )}
             </div>
           )}
 

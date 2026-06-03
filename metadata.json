@@ -1,6 +1,8 @@
 {
-  "name": "",
-  "description": "",
+  "name": "MODAUI",
+  "description": "AI-Powered Corp Operations Suite. Design-forward, industry-isolated digital employee operational workspaces.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
