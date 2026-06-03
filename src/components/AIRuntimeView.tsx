@@ -90,7 +90,19 @@ interface IndustryKnowledge {
 
 export default function AIRuntimeView({ onBackToLanding }: { onBackToLanding: () => void }) {
   const [activeTab, setActiveTab] = useState<'workflows' | 'agents' | 'prompts' | 'tools' | 'tasks' | 'memory' | 'knowledge' | 'model'>('workflows');
-  const [selectedIndustry, setSelectedIndustry] = useState<string>('Fashion');
+  const lockedIndustryId = typeof window !== 'undefined' ? localStorage.getItem('preview_industry_id') : null;
+  const getIndustryLabel = (id: string | null) => {
+    if (!id) return 'Fashion';
+    if (id === 'fashion') return 'Fashion';
+    if (id === 'catering') return 'Catering';
+    if (id === 'retail') return 'Goods';
+    if (id === 'beauty') return 'Beauty';
+    if (id === 'fitness') return 'Fitness';
+    if (id === 'jewelry') return 'Jewelry';
+    if (id === 'home') return 'Home';
+    return 'Fashion';
+  };
+  const [selectedIndustry, setSelectedIndustry] = useState<string>(getIndustryLabel(lockedIndustryId));
   const [isExecutingSim, setIsExecutingSim] = useState(false);
   const [currentSimNode, setCurrentSimNode] = useState<string | null>(null);
   
@@ -578,17 +590,21 @@ export default function AIRuntimeView({ onBackToLanding }: { onBackToLanding: ()
             <div className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1 flex items-center space-x-2 shrink-0">
               <span className="text-[10px] font-bold text-neutral-500 font-mono">INDUSTRY MEMORY BUCKET:</span>
               <select 
+                disabled={!!lockedIndustryId}
                 value={selectedIndustry}
                 onChange={(e) => {
                   setSelectedIndustry(e.target.value);
                   handleAddLog(`【领域重载】已在全局 AI Core 中热备并部署垂直行业知识底座：${e.target.value} SPU 及对账规章。`);
                 }}
-                className="bg-black text-[#1D9BF0] text-xs font-bold border-none outline-none cursor-pointer py-1 font-mono focus:ring-0"
+                className={`bg-black text-[#1D9BF0] text-xs font-bold border-none outline-none py-1 font-mono focus:ring-0 ${lockedIndustryId ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}
               >
                 <option value="Fashion">👗 潮流服饰与快反供应</option>
                 <option value="Catering">🍲 餐饮外卖与霸王满减</option>
                 <option value="Goods">📦 跨境百货与直通飙车</option>
                 <option value="Beauty">✨ 美业沙龙与客宿增值</option>
+                <option value="Fitness">🏋️ 健身打卡与能量配餐</option>
+                <option value="Jewelry">💎 高定珠宝传承手工款</option>
+                <option value="Home">🛋️ 空间美学软装大件配</option>
               </select>
             </div>
           </div>

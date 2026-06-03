@@ -25,7 +25,8 @@ interface IndustryTeam {
 }
 
 export default function AITeamsView({ onBackToLanding }: { onBackToLanding: () => void }) {
-  const [selectedIndustry, setSelectedIndustry] = useState<string>('fashion');
+  const lockedIndustryId = typeof window !== 'undefined' ? localStorage.getItem('preview_industry_id') : null;
+  const [selectedIndustry, setSelectedIndustry] = useState<string>(lockedIndustryId || 'fashion');
 
   const industryTeams: IndustryTeam[] = [
     {
@@ -168,21 +169,33 @@ export default function AITeamsView({ onBackToLanding }: { onBackToLanding: () =
         </div>
 
         {/* Industry switcher */}
-        <div className="flex flex-wrap gap-2.5">
-          {industryTeams.map((team) => (
-            <button
-              key={team.id}
-              onClick={() => setSelectedIndustry(team.id)}
-              className={`px-4 py-2.5 rounded-lg border text-xs font-bold transition-all duration-150 flex items-center space-x-2 cursor-pointer ${
-                selectedIndustry === team.id
-                  ? 'border-[#1D9BF0] bg-[#1D9BF0]/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950 hover:border-neutral-500 text-neutral-400 hover:text-white'
-              }`}
-            >
-              <span>{team.emoji}</span>
-              <span>{team.name}</span>
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2.5 items-center">
+          {industryTeams.map((team) => {
+            const isSelectable = !lockedIndustryId || lockedIndustryId === team.id;
+            return (
+              <button
+                key={team.id}
+                disabled={!isSelectable}
+                onClick={() => isSelectable && setSelectedIndustry(team.id)}
+                className={`px-4 py-2.5 rounded-lg border text-xs font-bold transition-all duration-150 flex items-center space-x-2 ${
+                  selectedIndustry === team.id
+                    ? 'border-[#1D9BF0] bg-[#1D9BF0]/10 text-white'
+                    : !isSelectable
+                      ? 'border-neutral-900 bg-neutral-950/60 opacity-40 cursor-not-allowed text-neutral-600'
+                      : 'border-neutral-800 bg-neutral-950 hover:border-neutral-500 text-neutral-400 hover:text-white cursor-pointer'
+                }`}
+              >
+                <span>{team.emoji}</span>
+                <span>{team.name}</span>
+                {!isSelectable && <span className="text-[10px] text-neutral-500">🔒</span>}
+              </button>
+            );
+          })}
+          {lockedIndustryId && (
+            <span className="text-xs text-[#1D9BF0] bg-[#1D9BF0]/10 border border-[#1D9BF0]/20 px-3 py-1.5 rounded-lg font-mono flex items-center gap-1.5 ml-2 animate-pulse">
+              <span>🔒 已强制绑定当前选择的垂直行业智体小队 (禁止跨行业引用)</span>
+            </span>
+          )}
         </div>
 
         {/* Selected Team Detail Panel */}

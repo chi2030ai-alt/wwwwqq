@@ -628,11 +628,26 @@ async function startServer() {
     }
   });
 
-  // === 4. PRODUCTS SPU & SKU CONTROLS ===
+  // === 4. PRODUCTS SPU & SKU CONTROLS WITH MULTI-TENANT ISOLATION ===
   app.get("/api/products", (req, res) => {
     try {
       const db = ModaDB.read();
-      res.json({ success: true, products: db.products });
+      const tenantId = req.query.tenantId ? String(req.query.tenantId) : null;
+      const industryId = req.query.industryId ? String(req.query.industryId) : null;
+      
+      let products = db.products;
+      
+      // Strict Tenant Level Separation filter
+      if (tenantId) {
+        products = products.filter(p => 
+          p.storeId === tenantId || 
+          p.storeId === `sto_${tenantId}` || 
+          p.storeId === "universal_store" ||
+          !p.storeId
+        );
+      }
+      
+      res.json({ success: true, products });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -640,15 +655,17 @@ async function startServer() {
 
   app.post("/api/products", (req, res) => {
     try {
-      const { storeId, name, category, price, inventory, sku, image = "📦" } = req.body;
+      const { storeId, tenantId, name, category, price, inventory, sku, image = "📦" } = req.body;
       if (!name || price === undefined) {
         res.status(400).json({ success: false, error: "Name and price are required product values." });
         return;
       }
       const db = ModaDB.read();
+      const targetStoreId = storeId || (tenantId ? `sto_${tenantId}` : "universal_store");
+      
       const newProd = {
         id: `prod_${Math.random().toString(36).slice(2, 11)}`,
-        storeId: storeId || "universal_store",
+        storeId: targetStoreId,
         name,
         category: category || "General",
         price: Number(price),
@@ -702,11 +719,25 @@ async function startServer() {
     }
   });
 
-  // === 5. ORDERS AUTOMATED DISPATCH SYSTEM ===
+  // === 5. ORDERS AUTOMATED DISPATCH SYSTEM WITH MULTI-TENANT ISOLATION ===
   app.get("/api/orders", (req, res) => {
     try {
       const db = ModaDB.read();
-      res.json({ success: true, orders: db.orders });
+      const tenantId = req.query.tenantId ? String(req.query.tenantId) : null;
+      
+      let orders = db.orders;
+      
+      // Multi-tenant order level filtering
+      if (tenantId) {
+        orders = orders.filter(o => 
+          o.merchantId === tenantId || 
+          o.storeId === tenantId || 
+          o.merchantId === `sto_${tenantId}` ||
+          o.storeId === `sto_${tenantId}`
+        );
+      }
+      
+      res.json({ success: true, orders });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }

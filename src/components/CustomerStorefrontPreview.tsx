@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { db } from '../services/firebase';
 import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { INDUSTRY_PRESETS } from '../data';
 
 interface Product {
   id: string;
@@ -23,6 +24,7 @@ interface Product {
 }
 
 const getIndustryDefaults = (indId: string) => {
+  return INDUSTRY_PRESETS[indId] || INDUSTRY_PRESETS.fashion;
   const defaults: Record<string, {
     company: string;
     headline: string;
